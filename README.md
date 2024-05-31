@@ -1,5 +1,6 @@
 # Pre-commit
 
+subject to change
 Pre-commit is used for linting, type-checking etc.,
 
 # Pytest
