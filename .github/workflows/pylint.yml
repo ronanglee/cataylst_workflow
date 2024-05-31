@@ -7,9 +7,16 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.8", "3.9", "3.10"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
     steps:
     - uses: actions/checkout@v4
+      with:
+          fetch-depth: 0
+    - run: |
+          for commit in $(git rev-list ${{ github.base_ref }}..${{ github.head_ref }}); do
+              git checkout $commit
+              echo "run test"
+          done
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v3
       with:
