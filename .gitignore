@@ -1,2 +1,4 @@
 template_structures/
 runs/
+tests/
+__pycache__/

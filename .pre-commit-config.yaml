@@ -25,7 +25,7 @@ repos:
             build|
             dist"""
         language_version: python3.12
-  # static typechecking
+  # typechecking
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.10.0
     hooks:
