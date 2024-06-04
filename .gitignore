@@ -2,3 +2,6 @@ template_structures/
 runs/
 tests/
 __pycache__/
+.myqueue/
+.pq_active-sqlite.db
+perqueue*
