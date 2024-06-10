@@ -12,9 +12,9 @@ def e_m_on_c(
     """Generate and run the input files for the e_m_at_c calculations.
 
     Args:
-        carbon_structure (Str): Identity of carbon structure (bulk, armchair or zigzag).
+        carbon_structure (str): Identity of carbon structure (bulk, armchair or zigzag).
         base_dir (Path): Path to the workflow script directory.
-        metal (Str): Metal in structure.
+        metal (str): Metal in structure.
         vasp_parameters (dict): Dictionary containing the VASP parameters.
 
     Returns:
@@ -55,17 +55,17 @@ def main(**data: dict) -> tuple[bool, None]:
 
     Args:
         data (dict): Dictionary containing the following keys:
-            base_dir (Path): Path to the base workflow directory.
-            run_structure (Path): Path to the generated input files.
-            carbon_structure (Str): Identity of carbon structure (bulk, armchair or zigzag).
-            metals (Str): Metal in structure.
+            base_dir (str): Path to the base workflow directory.
+            run_structure (str): Path to the generated input files.
+            carbon_structure str): Identity of carbon structure (bulk, armchair or zigzag).
+            metals (str): Metal in structure.
 
     Returns:
         Perqueue tuple containing a boolean and None.
     """
     vasp_parameters = vasp_input()
     e_m_on_c(  # type: ignore
-        data["carbon_structure"], data["base_dir"], data["metal"], vasp_parameters  # type: ignore
+        Path(data["carbon_structure"]), Path(data["base_dir"]), data["metal"], vasp_parameters  # type: ignore
     )  # type: ignore
     return True, None
 
