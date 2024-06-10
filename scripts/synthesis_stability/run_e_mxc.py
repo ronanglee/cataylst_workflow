@@ -6,30 +6,33 @@ from utils import read_and_write_datbase  # type: ignore
 from vasp_input import synthesis_stability_run_vasp, vasp_input  # type: ignore
 
 
-def e_xc(
-    struc_path: os.PathLike, base_dir: os.PathLike, metal: str, vasp_parameters: dict
+def e_mxc(
+    struc_path: os.PathLike, base_dir: os.PathLike, vasp_parameters: dict
 ) -> None:
-    """Generate and run the input files for the e_xc calculations.
+    """Generate and run the input files for the e_mxc calculations.
 
     Args:
-        strucs_path (Path): Path to the generated input file.
-        base_dir (Path): Path to the workflow script directory.
-        metal (Str): Metal in structure.
-        vas_parameters (dict): Dictionary containing the VASP parameters.
+        struc_path (Path): Path to the structure.
+        base_dir (Path): Path to the base workflow directory.
+        vasp_parameters (dict): Dictionary containing the VASP parameters.
 
     Returns:
         None
     """
-    run_dir = Path(os.path.join(base_dir, "runs", "synthesis_stability", "e_xc"))
-    run_dir.mkdir(exist_ok=True, parents=True)
+    structure_name = Path(struc_path).stem
+    e_mxc_dir = Path(
+        os.path.join(
+            base_dir, "runs", "synthesis_stability", "e_mxc", f"{structure_name}"
+        )
+    )
+    e_mxc_dir.mkdir(parents=True, exist_ok=True)
     structure = read(os.path.join(struc_path, "init.POSCAR"))
-    del structure[[atom.symbol == metal for atom in structure]]
-    remove_metal_dir = run_dir / struc_path / "remove_metal"
-    remove_metal_dir.mkdir(exist_ok=True, parents=True)
-    structure.write(remove_metal_dir / "init.POSCAR")
-    synthesis_stability_run_vasp(remove_metal_dir, vasp_parameters)
-    read_and_write_datbase(remove_metal_dir, base_dir)
-    os.chdir(base_dir)
+    structure.write(e_mxc_dir / "init.POSCAR")
+    cwd = os.getcwd()
+    synthesis_stability_run_vasp(e_mxc_dir, vasp_parameters)
+    read_and_write_datbase(e_mxc_dir, base_dir)
+
+    os.chdir(cwd)
 
 
 def main(**data: dict) -> tuple[bool, None]:
@@ -44,13 +47,12 @@ def main(**data: dict) -> tuple[bool, None]:
             run_structure (Path): Path to the generated input files.
             carbon_structure (Str): Identity of carbon structure (bulk, armchair or zigzag).
             metals (Str): Metal in structure.
-            dopant (List): List of dopants. ???? Is this needed?
 
     Returns:
         Perqueue tuple containing a boolean and None.
     """
     vasp_parameters = vasp_input()
-    e_xc(data["run_structure"], data["base_dir"], data["metal"], vasp_parameters)  # type: ignore
+    e_mxc(data["run_structure"], data["base_dir"], vasp_parameters)  # type: ignore
 
     return True, None
 

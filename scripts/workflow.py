@@ -1,19 +1,36 @@
-from synthesis_stability.generate_run import main
 import glob
 import os
-import sys
 from pathlib import Path
 
 from ase.io import read, write  # type: ignore
 from perqueue import PersistentQueue  # type: ignore
 from perqueue.task_classes.task import Task  # type: ignore
-from perqueue.task_classes.task_groups import Workflow, StaticWidthGroup
-# type: ignore
+from perqueue.task_classes.task_groups import Workflow  # type: ignore
 
 base_dir = Path(__file__).parent.parent
+
+# Perqueue needs files not imported functions
+syn_stab_run_e_xc = Path(base_dir) / "scripts" / "synthesis_stability" / "run_e_xc.py"
+syn_stab_run_e_c = Path(base_dir) / "scripts" / "synthesis_stability" / "run_e_c.py"
+syn_stab_run_e_mnx = Path(base_dir) / "scripts" / "synthesis_stability" / "run_e_mxc.py"
+syn_stab_run_e_m_on_c = (
+    Path(base_dir) / "scripts" / "synthesis_stability" / "run_e_m_on_c.py"
+)
+
+# TODO
+# heat of formation
+# Need to check to see percentage of each type of structure is left at the end of the workflow in comparison to the beginning # noqa
+
+
+try:  # type: ignore
+    os.system(f"rm -r {base_dir}/runs")  # type: ignore
+except:  # type: ignore # noqa
+    pass  # type: ignore # noqa
 cwd = Path(__file__).parent
 run_folder = Path(base_dir) / "runs"
+data_base_folder = run_folder / "databases"
 run_folder.mkdir(exist_ok=True)
+data_base_folder.mkdir(exist_ok=True)
 
 
 def generate_input_files(
@@ -36,8 +53,6 @@ def generate_input_files(
     template_structures = [read(f) for f in template_files]
     run_folder = Path(base_dir) / "runs" / "structures"
     run_folder.mkdir(exist_ok=True)
-    # print(f"Calculating for {len(run_files) *
-    #       len(metals) * len(dopant)} structures")
     run_structures = []
     for idx, structure in enumerate(template_structures):
         for metal in metals:
@@ -93,43 +108,136 @@ for i in run_structures:
 run_structures = test_run_structs
 # run_structures = run_structures[0:6]
 
-synthesis_stability = (
-    Path(base_dir) / "scripts" / "synthesis_stability" / "generate_run.py"
-)
+resources = "24:1:xeon24:20h"
 
-sys.path.append("/home/energy/rogle/asm_orr_rxn/catalyst_workflow/scripts")
+for e_c in ["armchair", "zigzag", "bulk"]:
+    t1 = Task(
+        str(syn_stab_run_e_c),
+        {"base_dir": str(base_dir), "carbon_structure": e_c},
+        resources,
+    )
+    t2_structs = []
+    for metal in metals:
+        t2 = Task(
+            str(syn_stab_run_e_m_on_c),
+            {"base_dir": str(base_dir), "carbon_structure": e_c, "metal": metal},
+            resources,
+        )
+        t2_structs.append(t2)
 
-for struc_path in run_structures:
-    structure = read(Path(struc_path) / Path("init.POSCAR"))
-    dopant = None
-    struc_metal = None
-    for symbol in structure.get_chemical_symbols():
-        if symbol in metals:
-            struc_metal = symbol
-        if dopants:
-            if symbol in dopants:
-                dopant = symbol
-    if structure[35].symbol == struc_metal:
-        carbon_structure = "armchair"
-    elif structure[45].symbol == struc_metal or structure[38].symbol == struc_metal:
-        carbon_structure = "zigzag"
-    elif structure[62].symbol == struc_metal:
-        carbon_structure = "bulk"
-    data = {
-        "base_dir": str(base_dir),
-        "run_structure": struc_path,
-        "carbon_structure": carbon_structure,
-        "metal": struc_metal,
-        "dopant": dopant,
-    }
-    # print(data)
-    # main(**data)
-    # print("RUNNING WITHOUT VDW CORRECTION")
-
-    t1 = Task(str(synthesis_stability), data, "24:1:xeon24:1m")
-    wf = Workflow({t1: []})
+    t3_structs = []
+    t4_structs = []
+    for struc_path in run_structures:
+        structure = read(Path(struc_path) / Path("init.POSCAR"))
+        struc_metal: str | None = None
+        carbon_structure: str | None = None
+        if metal in structure.get_chemical_symbols():
+            struc_metal = metal
+        else:
+            continue
+        if structure[35].symbol == struc_metal:
+            carbon_structure = "armchair"
+        elif structure[45].symbol == struc_metal or structure[38].symbol == struc_metal:
+            carbon_structure = "zigzag"
+        elif structure[62].symbol == struc_metal:
+            carbon_structure = "bulk"
+        if struc_metal == metal and carbon_structure == e_c:
+            t3 = Task(
+                str(syn_stab_run_e_xc),
+                {"base_dir": str(base_dir), "run_structure": Path(struc_path)},
+                resources,
+            )
+            t4 = Task(
+                str(syn_stab_run_e_mnx),
+                {"base_dir": str(base_dir), "run_structure": Path(struc_path)},
+                resources,
+            )
+            t3_structs.append(t3)
+            t4_structs.append(t4)
+    t2s = {items: [t1] for items in t2_structs}
+    swf1 = Workflow(t2s)
+    t3s = {items: [swf1] for items in t3_structs}
+    t4s = {items: [swf1] for items in t4_structs}
+    wf1 = Workflow(t3s)
+    wf2 = Workflow(t4s)
+    wf = Workflow({wf1: [], wf2: []})
     with PersistentQueue() as pq:
         pq.submit(wf)
+
+
+exit()
+# for struc_path in run_structures:
+#     structure = read(Path(struc_path) / Path("init.POSCAR"))
+#     dopant: str | None = None
+#     struc_metal: str | None = None
+#     carbon_structure: str | None = None
+#     for symbol in structure.get_chemical_symbols():
+#         if symbol in metals:
+#             struc_metal = symbol
+#         if dopants:
+#             if symbol in dopants:
+#                 dopant = symbol
+#     if structure[35].symbol == struc_metal:
+#         carbon_structure = "armchair"
+#     elif structure[45].symbol == struc_metal or structure[38].symbol == struc_metal:
+#         carbon_structure = "zigzag"
+#     elif structure[62].symbol == struc_metal:
+#         carbon_structure = "bulk"
+#     if not struc_metal:
+#         print("No metal found in structure")
+#     if not carbon_structure:
+#         print("No carbon structure found in structure")
+#     if not dopant:
+#         print("No dopant found in structure")
+#     data = {
+#         "base_dir": str(base_dir),
+#         "run_structure": struc_path,
+#         "carbon_structure": carbon_structure,
+#         "metal": struc_metal,
+#         "dopant": dopant,
+#     }
+#     # main(**data)
+#     t4 = Task(str(syn_stab_run_e_c), data, resources)
+#     wf = Workflow({t4: []})
+#     with PersistentQueue() as pq:
+#         pq.submit(wf)
+#
+#     # print(data)
+#     # main(**data)
+#     # print("RUNNING WITHOUT VDW CORRECTION")
+#
+#     t3 = Task(str(syn_stab_run_e_xc), data, resources)
+#     t4 = Task(str(syn_stab_run_e_mnx), data, resources)
+# e_c_dir = base_dir / "runs" / "synthesis_stability" / "e_c" / f"{carbon_structure}"
+# e_m_on_c_dir = (
+#     base_dir
+#     / "runs"
+#     / "synthesis_stability"
+#     / "e_m_on_c"
+#     / f"{carbon_structure}_0N_0H"
+#     / f"{struc_metal}"
+# )
+# #
+# #     e_c_dir.exists() and e_m_on_c_dir.exists()
+# # ):  # Skip as carbon structure already exists
+# #     wf = Workflow({t1: [], t2: []})
+# # elif e_m_on_c_dir.exists() and not e_c_dir.exists():
+# #     e_c_dir.mkdir(exist_ok=True, parents=True)
+# #     t3 = Task(str(syn_stab_run_e_c), data, resources)
+# #     wf = Workflow({t1: [], t2: [], t3: []})
+# # elif not e_m_on_c_dir.exists() and e_c_dir.exists():
+# #     e_m_on_c_dir.mkdir(exist_ok=True, parents=True)
+# #     t4 = Task(str(syn_stab_run_e_m_on_c), data, resources)
+# #     wf = Workflow({t1: [], t2: [], t4: []})
+# # elif not e_m_on_c_dir.exists() and not e_c_dir.exists():
+# #     e_c_dir.mkdir(exist_ok=True, parents=True)
+# #     e_m_on_c_dir.mkdir(exist_ok=True, parents=True)
+# t3 = Task(str(syn_stab_run_e_c), data, resources)
+# t4 = Task(str(syn_stab_run_e_m_on_c), data, resources)
+# wf = Workflow({t1: [t3, t4], t2: [t3, t4]})
+# # I should run the dependencies first and then the main task
+# with PersistentQueue() as pq:
+#     pq.submit(wf)
 
 #
 # for struc in run_structures:

@@ -1,7 +1,10 @@
 import os
 
+from ase.calculators.vasp import Vasp  # type: ignore
+from ase.io import read  # type: ignore
 
-def vasp_input():
+
+def vasp_input() -> dict:
     params = {
         "encut": 600,  # plane-wave cutoff in eV
         "kpts": (3, 3, 1),  # k-point sampling
@@ -32,16 +35,17 @@ def vasp_input():
         "lmaxmix": 4,  # See manual (or rather VASP wiki)
         "lasph": True,  # See manual
         "lreal": "Auto",  # See manual
+        "symprec": 1e-06,  # See manual
         # See manual. Shouldn't affect energy, only performance. 4 is default.
         "nsim": 4,
         # See manual. True is good for metals and small gap semiconductors.
         "ldiag": True,
         "xc": "PBE",
-        # 'gga'     : 'bf',
-        # 'zab_vdw' : -1.8867,
-        # 'luse_vdw': True,
-        # 'maxmix'  : 200,
-        # 'ncore'   : 40
+        "gga": "bf",
+        "zab_vdw": -1.8867,
+        "luse_vdw": True,
+        "maxmix": 200,
+        "ncore": 40,
     }
     return params
 
@@ -65,7 +69,7 @@ def synthesis_stability_run_vasp(directory: os.PathLike, vasp_parameters: dict) 
         vasp_parameters["amix_mag"] = 0.08
         vasp_parameters["bmix_mag"] = 1.0
 
-    atoms = read(directory / "init.POSCAR")
+    atoms = read(os.path.join(directory, "init.POSCAR"))
     # Begin with static calculation without dipole correction
     vasp_parameters["nelmdl"] = -8
     vasp_parameters["ibrion"] = 2
@@ -93,7 +97,7 @@ def synthesis_stability_run_vasp(directory: os.PathLike, vasp_parameters: dict) 
     vasp_parameters["dipol"] = atoms.get_center_of_mass(scaled=True)
     vasp_parameters["nsw"] = 999
     vasp_parameters["lwave"] = True
-    paramscopy = params.copy()
+    paramscopy = vasp_parameters.copy()
     calc = Vasp(**paramscopy)
     atoms.set_calculator(calc)
     atoms.get_potential_energy()
