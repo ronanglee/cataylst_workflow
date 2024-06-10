@@ -6,20 +6,19 @@ from utils import read_and_write_datbase  # type: ignore
 from vasp_input import synthesis_stability_run_vasp, vasp_input  # type: ignore
 
 
-def e_m_on_c(
-    carbon_structure: str, base_dir: os.PathLike, metal: str, vasp_parameters: dict
-) -> None:
+def e_m_on_c(data: dict, vasp_parameters: dict) -> None:
     """Generate and run the input files for the e_m_at_c calculations.
 
     Args:
-        carbon_structure (str): Identity of carbon structure (bulk, armchair or zigzag).
-        base_dir (Path): Path to the workflow script directory.
-        metal (str): Metal in structure.
+        data (dict): Dictionary containing the run structure, base directory and metal.
         vasp_parameters (dict): Dictionary containing the VASP parameters.
 
     Returns:
         None
     """
+    carbon_structure = Path(data["carbon_structure"])
+    base_dir = Path(data["base_dir"])
+    metal = data["metal"]
     e_m_on_c_dir = Path(
         os.path.join(
             base_dir,
@@ -43,14 +42,14 @@ def e_m_on_c(
     cwd = os.getcwd()
     structure.write(e_m_on_c_dir / "init.POSCAR")
     synthesis_stability_run_vasp(e_m_on_c_dir, vasp_parameters)
-    read_and_write_datbase(e_m_on_c_dir, base_dir)
+    read_and_write_datbase(e_m_on_c_dir, base_dir, "e_m_on_c", data)
     os.chdir(cwd)
 
 
 def main(**data: dict) -> tuple[bool, None]:
     """Run the synthesis stability part of the workflow.
     g_a = e_xc + e_m_on_c - e_c - e_mxc
-    g_d = e_m + e_xc - e_mnc
+    g_d = e_m + e_xc - e_mxc
     where x is the dopant, c is carbon and m is the metal.
 
     Args:
@@ -64,9 +63,8 @@ def main(**data: dict) -> tuple[bool, None]:
         Perqueue tuple containing a boolean and None.
     """
     vasp_parameters = vasp_input()
-    e_m_on_c(  # type: ignore
-        Path(data["carbon_structure"]), Path(data["base_dir"]), data["metal"], vasp_parameters  # type: ignore
-    )  # type: ignore
+    e_m_on_c(data, vasp_parameters)
+
     return True, None
 
 
