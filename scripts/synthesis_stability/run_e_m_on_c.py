@@ -41,7 +41,6 @@ def e_m_on_c(
         if atom.symbol == "Pt":  # Pt is the template metal
             atom.symbol = metal
     cwd = os.getcwd()
-    print(f"creating {e_m_on_c_dir}")
     structure.write(e_m_on_c_dir / "init.POSCAR")
     synthesis_stability_run_vasp(e_m_on_c_dir, vasp_parameters)
     read_and_write_datbase(e_m_on_c_dir, base_dir)
