@@ -113,14 +113,14 @@ resources = "24:1:xeon24:20h"
 for e_c in ["armchair", "zigzag", "bulk"]:
     t1 = Task(
         str(syn_stab_run_e_c),
-        {"base_dir": str(base_dir), "carbon_structure": e_c},
+        {"base_dir": base_dir, "carbon_structure": e_c},
         resources,
     )
     t2_structs = []
     for metal in metals:
         t2 = Task(
             str(syn_stab_run_e_m_on_c),
-            {"base_dir": str(base_dir), "carbon_structure": e_c, "metal": metal},
+            {"base_dir": base_dir, "carbon_structure": e_c, "metal": metal},
             resources,
         )
         t2_structs.append(t2)
