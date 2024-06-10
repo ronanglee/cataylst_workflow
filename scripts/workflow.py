@@ -108,19 +108,19 @@ for i in run_structures:
 run_structures = test_run_structs
 # run_structures = run_structures[0:6]
 
-resources = "24:1:xeon24:20h"
+resources = "24:1:xeon24:50h"
 
 for e_c in ["armchair", "zigzag", "bulk"]:
     t1 = Task(
         str(syn_stab_run_e_c),
-        {"base_dir": base_dir, "carbon_structure": e_c},
+        {"base_dir": str(base_dir), "carbon_structure": e_c},
         resources,
     )
     t2_structs = []
     for metal in metals:
         t2 = Task(
             str(syn_stab_run_e_m_on_c),
-            {"base_dir": base_dir, "carbon_structure": e_c, "metal": metal},
+            {"base_dir": str(base_dir), "carbon_structure": e_c, "metal": metal},
             resources,
         )
         t2_structs.append(t2)
@@ -144,12 +144,12 @@ for e_c in ["armchair", "zigzag", "bulk"]:
         if struc_metal == metal and carbon_structure == e_c:
             t3 = Task(
                 str(syn_stab_run_e_xc),
-                {"base_dir": str(base_dir), "run_structure": Path(struc_path)},
+                {"base_dir": str(base_dir), "run_structure": str(struc_path)},
                 resources,
             )
             t4 = Task(
                 str(syn_stab_run_e_mnx),
-                {"base_dir": str(base_dir), "run_structure": Path(struc_path)},
+                {"base_dir": str(base_dir), "run_structure": str(struc_path)},
                 resources,
             )
             t3_structs.append(t3)

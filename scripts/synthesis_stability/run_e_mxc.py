@@ -43,16 +43,16 @@ def main(**data: dict) -> tuple[bool, None]:
 
     Args:
         data (dict): Dictionary containing the following keys:
-            base_dir (Path): Path to the base workflow directory.
-            run_structure (Path): Path to the generated input files.
-            carbon_structure (Str): Identity of carbon structure (bulk, armchair or zigzag).
-            metals (Str): Metal in structure.
+            base_dir (str): Path to the base workflow directory.
+            run_structure (str): Path to the generated input files.
+            carbon_structure (str): Identity of carbon structure (bulk, armchair or zigzag).
+            metals (str): Metal in structure.
 
     Returns:
         Perqueue tuple containing a boolean and None.
     """
     vasp_parameters = vasp_input()
-    e_mxc(data["run_structure"], data["base_dir"], vasp_parameters)  # type: ignore
+    e_mxc(Path(data["run_structure"]), Path(data["base_dir"]), vasp_parameters)  # type: ignore
 
     return True, None
 

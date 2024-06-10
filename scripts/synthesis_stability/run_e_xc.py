@@ -14,7 +14,7 @@ def e_xc(
     Args:
         strucs_path (Path): Path to the generated input file.
         base_dir (Path): Path to the workflow script directory.
-        metal (Str): Metal in structure.
+        metal (str): Metal in structure.
         vas_parameters (dict): Dictionary containing the VASP parameters.
 
     Returns:
@@ -40,17 +40,17 @@ def main(**data: dict) -> tuple[bool, None]:
 
     Args:
         data (dict): Dictionary containing the following keys:
-            base_dir (Path): Path to the base workflow directory.
-            run_structure (Path): Path to the generated input files.
-            carbon_structure (Str): Identity of carbon structure (bulk, armchair or zigzag).
-            metals (Str): Metal in structure.
+            base_dir (str): Path to the base workflow directory.
+            run_structure (str): Path to the generated input files.
+            carbon_structure (str): Identity of carbon structure (bulk, armchair or zigzag).
+            metals (str): Metal in structure.
             dopant (List): List of dopants. ???? Is this needed?
 
     Returns:
         Perqueue tuple containing a boolean and None.
     """
     vasp_parameters = vasp_input()
-    e_xc(data["run_structure"], data["base_dir"], data["metal"], vasp_parameters)  # type: ignore
+    e_xc(Path(data["run_structure"]), Path(data["base_dir"]), data["metal"], vasp_parameters)  # type: ignore
 
     return True, None
 
