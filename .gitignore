@@ -1,7 +1,12 @@
 template_structures/
 runs/
+old_good_run/
+operating_stability/
 tests/
 __pycache__/
 .myqueue/
 .pq_active-sqlite.db
 perqueue*
+scripts/workflow.log
+testing_hs/
+stock_databases/read_in_OOH_ads.py

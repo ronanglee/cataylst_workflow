@@ -2,11 +2,16 @@ import os
 from pathlib import Path
 
 from ase.io import read  # type: ignore
-from utils import read_and_write_datbase  # type: ignore
-from vasp_input import synthesis_stability_run_vasp, vasp_input  # type: ignore
+from utils import (  # type: ignore
+    gather_structs,
+    read_and_write_database,
+    run_logger,
+    synthesis_stability_run_vasp,
+)
+from vasp_input import vasp_input  # type: ignore
 
 
-def e_m_on_c(data: dict, vasp_parameters: dict) -> None:
+def e_m_on_c(data: dict, vasp_parameters: dict) -> bool:
     """Generate and run the input files for the e_m_at_c calculations.
 
     Args:
@@ -14,11 +19,14 @@ def e_m_on_c(data: dict, vasp_parameters: dict) -> None:
         vasp_parameters (dict): Dictionary containing the VASP parameters.
 
     Returns:
-        None
+        converged (bool): True if all the SCF calculations have converged, False otherwise.
     """
-    carbon_structure = Path(data["carbon_structure"])
-    base_dir = Path(data["base_dir"])
-    metal = data["metal"]
+    skimmed_data = data.copy()
+    del skimmed_data["all_run_structures"]
+    del skimmed_data["dopants"]
+    carbon_structure = Path(skimmed_data["carbon_structure"])
+    base_dir = Path(skimmed_data["base_dir"])
+    metal = skimmed_data["metal"]
     e_m_on_c_dir = Path(
         os.path.join(
             base_dir,
@@ -41,12 +49,21 @@ def e_m_on_c(data: dict, vasp_parameters: dict) -> None:
             atom.symbol = metal
     cwd = os.getcwd()
     structure.write(e_m_on_c_dir / "init.POSCAR")
-    synthesis_stability_run_vasp(e_m_on_c_dir, vasp_parameters)
-    read_and_write_datbase(e_m_on_c_dir, base_dir, "e_m_on_c", data)
-    os.chdir(cwd)
+    converged = synthesis_stability_run_vasp(e_m_on_c_dir, vasp_parameters, "e_m_on_c")
+    if converged:
+        outcar = Path(e_m_on_c_dir) / "OUTCAR.opt"
+        skimmed_data["name"] = f"{carbon_structure}_0N_0H"
+        read_and_write_database(outcar, "e_m_on_c", skimmed_data)
+        os.chdir(cwd)
+        return True
+    else:
+        run_logger("e_m_on_c calculation did not converge.", str(__file__), "error")
+        print("e_m_on_c calculation did not converge.")
+        os.chdir(cwd)
+        return False
 
 
-def main(**data: dict) -> tuple[bool, None]:
+def main(**data: dict) -> tuple[bool, dict]:
     """Run the synthesis stability part of the workflow.
     g_a = e_xc + e_m_on_c - e_c - e_mxc
     g_d = e_m + e_xc - e_mxc
@@ -57,15 +74,15 @@ def main(**data: dict) -> tuple[bool, None]:
             base_dir (str): Path to the base workflow directory.
             run_structure (str): Path to the generated input files.
             carbon_structure str): Identity of carbon structure (bulk, armchair or zigzag).
-            metals (str): Metal in structure.
+            metal (str): Metal in structure.
 
     Returns:
-        Perqueue tuple containing a boolean and None.
+        Perqueue return tuple.
     """
     vasp_parameters = vasp_input()
-    e_m_on_c(data, vasp_parameters)
-
-    return True, None
+    converged = e_m_on_c(data, vasp_parameters)
+    workflow_data = gather_structs(data)
+    return converged, workflow_data
 
 
 if __name__ == "__main__":

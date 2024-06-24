@@ -2,11 +2,15 @@ import os
 from pathlib import Path
 
 from ase.io import read  # type: ignore
-from utils import read_and_write_datbase  # type: ignore
-from vasp_input import synthesis_stability_run_vasp, vasp_input  # type: ignore
+from utils import (  # type: ignore
+    read_and_write_database,
+    run_logger,
+    synthesis_stability_run_vasp,
+)
+from vasp_input import vasp_input  # type: ignore
 
 
-def e_c(data: dict, vasp_parameters: dict) -> None:
+def e_c(data: dict, vasp_parameters: dict) -> bool:
     """Generate and run the input files for the e_c calculations.
 
     Args:
@@ -14,7 +18,7 @@ def e_c(data: dict, vasp_parameters: dict) -> None:
         vasp_parameters (dict): Dictionary containing the VASP parameters.
 
     Returns:
-        None
+        converged (bool): True if all the SCF calculations have converged, False otherwise.
     """
     carbon_structure = Path(data["carbon_structure"])
     base_dir = Path(data["base_dir"])
@@ -30,9 +34,18 @@ def e_c(data: dict, vasp_parameters: dict) -> None:
     structure = read(os.path.join(struct_dir, "init.POSCAR"))
     cwd = os.getcwd()
     structure.write(e_c_dir / "init.POSCAR")
-    synthesis_stability_run_vasp(e_c_dir, vasp_parameters)
-    read_and_write_datbase(e_c_dir, base_dir, "e_c")
-    os.chdir(cwd)
+    converged = synthesis_stability_run_vasp(e_c_dir, vasp_parameters, "e_c")
+    if converged:
+        outcar = Path(e_c_dir) / "OUTCAR.opt"
+        data["name"] = data["carbon_structure"]
+        read_and_write_database(outcar, "e_c", data)
+        os.chdir(cwd)
+        return True
+    else:
+        print("e_c calculation did not converge.")
+        run_logger("e_c calculation did not converge.", __file__)
+        os.chdir(cwd)
+        return False
 
 
 def main(**data: dict) -> tuple[bool, None]:
@@ -42,19 +55,14 @@ def main(**data: dict) -> tuple[bool, None]:
     where x is the dopant, c is carbon and m is the metal.
 
     Args:
-        data (dict): Dictionary containing the following keys:
-            base_dir (str): Path to the base workflow directory.
-            run_structure (str): Path to the generated input files.
-            carbon_structure (str): Identity of carbon structure (bulk, armchair or zigzag).
-            metals (str): Metal in structure.
+        data (dict): Dictionary containing the run parameters.
 
     Returns:
-        Perqueue tuple containing a boolean and None.
+        Perqueue return tuple.
     """
     vasp_parameters = vasp_input()
-    e_c(data, vasp_parameters)
-
-    return True, None
+    converged = e_c(data, vasp_parameters)
+    return converged, None
 
 
 if __name__ == "__main__":

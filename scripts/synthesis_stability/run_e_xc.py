@@ -2,11 +2,16 @@ import os
 from pathlib import Path
 
 from ase.io import read  # type: ignore
-from utils import read_and_write_datbase  # type: ignore
-from vasp_input import synthesis_stability_run_vasp, vasp_input  # type: ignore
+from perqueue.constants import INDEX_KW  # type: ignore
+from utils import (  # type: ignore
+    read_and_write_database,
+    run_logger,
+    synthesis_stability_run_vasp,
+)
+from vasp_input import vasp_input  # type: ignore
 
 
-def e_xc(data: dict, vasp_parameters: dict) -> None:
+def e_xc(data: dict, vasp_parameters: dict) -> bool:
     """Generate and run the input files for the e_xc calculations.
 
     Args:
@@ -14,21 +19,34 @@ def e_xc(data: dict, vasp_parameters: dict) -> None:
         vasp_parameters (dict): Dictionary containing the VASP parameters.
 
     Returns:
-        None
+        bool: True if the calculation converged, False otherwise.
     """
     struc_path = Path(data["run_structure"])
     base_dir = Path(data["base_dir"])
     metal = data["metal"]
+    dopant = data["dopant"]
+    del data["metal"]
     run_dir = Path(os.path.join(base_dir, "runs", "synthesis_stability", "e_xc"))
     run_dir.mkdir(exist_ok=True, parents=True)
     structure = read(os.path.join(struc_path, "init.POSCAR"))
+    if dopant != "":
+        for atom in structure:
+            if atom.symbol == "B":
+                atom.symbol = dopant
     del structure[[atom.symbol == metal for atom in structure]]
-    remove_metal_dir = run_dir / struc_path / "remove_metal"
+    remove_metal_dir = run_dir / Path(str(struc_path.stem).replace(metal, "M"))
     remove_metal_dir.mkdir(exist_ok=True, parents=True)
     structure.write(remove_metal_dir / "init.POSCAR")
-    synthesis_stability_run_vasp(remove_metal_dir, vasp_parameters)
-    read_and_write_datbase(remove_metal_dir, base_dir, "e_xc", data)
-    os.chdir(base_dir)
+    converged = synthesis_stability_run_vasp(remove_metal_dir, vasp_parameters, "e_xc")
+    if converged:
+        outcar = Path(remove_metal_dir) / "OUTCAR.opt"
+        data["name"] = str(Path(data["run_structure"]).stem).replace(metal, "M")
+        read_and_write_database(outcar, "e_xc", data)
+        return True
+    else:
+        run_logger("e_xc calculation did not converge.", str(__file__), "error")
+        print("e_xc calculation did not converge.")
+        return False
 
 
 def main(**data: dict) -> tuple[bool, None]:
@@ -38,19 +56,17 @@ def main(**data: dict) -> tuple[bool, None]:
     where x is the dopant, c is carbon and m is the metal.
 
     Args:
-        data (dict): Dictionary containing the following keys:
-            base_dir (str): Path to the base workflow directory.
-            run_structure (str): Path to the generated input files.
-            carbon_structure (str): Identity of carbon structure (bulk, armchair or zigzag).
-            metals (str): Metal in structure.
-
+        data (dict): Dictionary containing run parameters.
     Returns:
-        Perqueue tuple containing a boolean and None.
+        Perqueue return tuple.
     """
+    cwd = os.getcwd()
     vasp_parameters = vasp_input()
-    e_xc(data, vasp_parameters)  # type: ignore
-
-    return True, None
+    idx, *_ = data[INDEX_KW]
+    idx = str(idx)
+    converged = e_xc(data[idx], vasp_parameters)  # type: ignore
+    os.chdir(cwd)
+    return converged, None
 
 
 if __name__ == "__main__":
