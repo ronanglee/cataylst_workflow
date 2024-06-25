@@ -1,9 +1,3 @@
-# import os
-
-# from ase.calculators.vasp import Vasp  # type: ignore
-# from ase.io import read  # type: ignore
-
-
 # def vasp_input() -> dict:
 #     params = {
 #         "encut": 100,  # plane-wave cutoff in eV
@@ -50,11 +44,6 @@
 #     print('MAKE SURE TO COPY ALL, IVE CHANGED STUFF BELOW')
 #     return params
 
-# import os
-
-# from ase.calculators.vasp import Vasp  # type: ignore
-# from ase.io import read  # type: ignore
-
 
 def vasp_input() -> dict:
     params = {
@@ -70,7 +59,7 @@ def vasp_input() -> dict:
         "ediff": 1e-05,  # break condition for the electronic SC-loop
         "nelmin": 0,  # Force the minimum number of SC-steps
         # break condition for ionic relaxation, positive: energy; negative: forces
-        "ediffg": -0.02,
+        # "ediffg": -0.02,
         # relaxation scheme (0: relax ions only; see documentation for other)
         "isif": 4,
         # Use of symmetry. 0: switch off symmetry. Default: 2 for PAW (1 for US-PP)

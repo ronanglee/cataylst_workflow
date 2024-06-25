@@ -118,8 +118,8 @@ run_structures = generate_input_files(metals, base_dir, dopants)
 # resources = "56:1:xeon56:50h"
 # resources = "40:1:xeon40el8_768:10m"
 # resources = '1:local:10m'
-resources = "5:1:xeon24el8_test:10m"
-# resources =  '40:1:xeon40el8:10m'
+# resources = "5:1:xeon24el8_test:10m"
+resources = "24:1:xeon24el8:20h"
 
 run_logger("Starting workflow", str(__file__), "info")
 # Should have an end workflow somewhere

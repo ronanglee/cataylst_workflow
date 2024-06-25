@@ -39,7 +39,7 @@ def check_ion(set_nsw: int) -> int:
        set_nsw (int): NSW in INCAR
 
     Returns:
-       control (int): 1 if calculation didn't stop because reached the max number of ionic steps, 0 otherwise.
+        1 if calculation didn't stop because reached the max number of ionic steps, 0 otherwise.
     """
     regexp = re.compile("Iteration\s+(?P<nsw>\d*)\(\s+(?P<nelm>\d*)\)")  # noqa
     max_nsw = 0

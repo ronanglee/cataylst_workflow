@@ -43,7 +43,7 @@ def e_c(data: dict, vasp_parameters: dict) -> bool:
         return True
     else:
         print("e_c calculation did not converge.")
-        run_logger("e_c calculation did not converge.", __file__)
+        run_logger("e_c calculation did not converge.", str(__file__), "error")
         os.chdir(cwd)
         return False
 

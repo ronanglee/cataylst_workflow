@@ -60,7 +60,7 @@ def main(**data: dict) -> tuple[bool, dict]:
     add_entry(os.path.join(data_base_folder, "operating_stability.json"), database)
     del data["pq_index"]
 
-    # run_logger('discard etc...')
+    # run_logger("DISCARD - Operating stability < ???? eV.", str(__file__), 'error'))
     # if 'z' in carbon_structure:
     #     add_entry(os.path.join(data_base_folder, "seperated_operating_stability.json"), database)
     #     return True, data
