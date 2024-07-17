@@ -96,8 +96,11 @@ def generate_input_files(
             str(Path(base_dir) / "template_structures" / "test_structs" / "dopant")
             + "/*B*/POSCAR.opt"
         )
-        dopant_structures = [read(f) for f in dopant_files if '-' not in f]
-        for idx, structure in enumerate(dopant_structures):
+        # dopant_structures = [read(f) for f in dopant_files if '-' not in f]
+        for idx, d_structure in enumerate(dopant_files):
+            if '-' in d_structure:
+                continue
+            structure = read(d_structure)
             for metal in metals:
                 for dope in dopants:
                     copy_structure = structure.copy()
@@ -105,10 +108,16 @@ def generate_input_files(
                         if atom.symbol == "Pt":
                             atom.symbol = metal
                         if atom.symbol == "B":
-                            atom.symbol = dope
-                    save_dir = run_folder / dopant_files[idx].split("/")[-2].replace(
-                        "Pt", metal
-                    ).replace("B", dope)
+                            if not 'S' in atom.symbol: # so i can run S and B structures together
+                                atom.symbol = dope
+                    if 'S' in d_structure:
+                        save_dir = run_folder / dopant_files[idx].split("/")[-2].replace(
+                            "Pt", metal
+                        )
+                    else:
+                        save_dir = run_folder / dopant_files[idx].split("/")[-2].replace(
+                            "Pt", metal
+                        ).replace("B", dope)
                     run_structures.append(str(save_dir))
                     save_dir.mkdir(exist_ok=True)
                     write(save_dir / "init.POSCAR", copy_structure)
@@ -120,7 +129,7 @@ metals = ["Pt", "Pd", 'Fe', 'Co', 'Ni']
 # metals =  ["Pt"]
 
 # Run all strucutrues with no dopants and see results
-dopants = [""]  # Co-doping can be a good option aswell.
+dopants = ["B", "S"]  # Co-doping can be a good option aswell.
 # Engineering local coordination environments and site
 # densities for high‐performance Fe‐N‐C oxygen reduction
 # reaction electrocatalysis
