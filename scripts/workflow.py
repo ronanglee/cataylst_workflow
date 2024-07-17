@@ -41,8 +41,8 @@ act_sel = Path(base_dir) / "scripts" / "activity_selectivity" / "run_act_sel.py"
 # Copy from xc folder into new xc_solv_implicit folder and run.
 # Raul variational autoencoder
 
-if os.path.exists("workflow.log"):
-    os.remove("workflow.log")
+# if os.path.exists("workflow.log"):
+#     os.remove("workflow.log")
 
 # try:  # type: ignore
 #     os.system(f"rm -r {base_dir}/runs")  # type: ignore
@@ -50,7 +50,7 @@ if os.path.exists("workflow.log"):
 #     pass  # type: ignore # noqa
 
 cwd = Path(__file__).parent
-run_folder = Path(base_dir) / "check_run_indice_run"
+run_folder = Path(base_dir) / "runs"
 data_base_folder = run_folder / "databases"
 run_folder.mkdir(exist_ok=True)
 data_base_folder.mkdir(exist_ok=True)
@@ -75,7 +75,7 @@ def generate_input_files(
     template_files = glob.glob(
         str(Path(base_dir) / "template_structures" / "test_structs") + "/Pt*/POSCAR.opt"
     )
-    template_structures = [read(f) for f in template_files if Path(f).parent.stem in ['PtN4CZ', 'PtN4A', 'PtN4C', 'PtN3C'] and '-' not in f]
+    template_structures = [read(f) for f in template_files]
     run_folder = Path(base_dir) / "runs" / "structures"
     run_folder.mkdir(exist_ok=True)
     run_structures = []
@@ -96,11 +96,8 @@ def generate_input_files(
             str(Path(base_dir) / "template_structures" / "test_structs" / "dopant")
             + "/*B*/POSCAR.opt"
         )
-        # dopant_structures = [read(f) for f in dopant_files if '-' not in f]
-        for idx, d_structure in enumerate(dopant_files):
-            if '-' in d_structure:
-                continue
-            structure = read(d_structure)
+        dopant_structures = [read(f) for f in dopant_files]
+        for idx, structure in enumerate(dopant_structures):
             for metal in metals:
                 for dope in dopants:
                     copy_structure = structure.copy()
@@ -108,16 +105,10 @@ def generate_input_files(
                         if atom.symbol == "Pt":
                             atom.symbol = metal
                         if atom.symbol == "B":
-                            if not 'S' in atom.symbol: # so i can run S and B structures together
-                                atom.symbol = dope
-                    if 'S' in d_structure:
-                        save_dir = run_folder / dopant_files[idx].split("/")[-2].replace(
-                            "Pt", metal
-                        )
-                    else:
-                        save_dir = run_folder / dopant_files[idx].split("/")[-2].replace(
-                            "Pt", metal
-                        ).replace("B", dope)
+                            atom.symbol = dope
+                    save_dir = run_folder / dopant_files[idx].split("/")[-2].replace(
+                        "Pt", metal
+                    ).replace("B", dope)
                     run_structures.append(str(save_dir))
                     save_dir.mkdir(exist_ok=True)
                     write(save_dir / "init.POSCAR", copy_structure)
@@ -125,19 +116,11 @@ def generate_input_files(
     return run_structures
 
 
-metals = ["Pt", "Pd", 'Fe', 'Co', 'Ni']
-# metals =  ["Pt"]
-
-# Run all strucutrues with no dopants and see results
-dopants = ["B", "S"]  # Co-doping can be a good option aswell.
-# Engineering local coordination environments and site
-# densities for high‐performance Fe‐N‐C oxygen reduction
-# reaction electrocatalysis
-
-# Oxygen aswell could be a good dopant but need to be bound to second coordination sphere carbon to stop 2e- pathway (FeN4 shows good 4e- as o-o bond cleaved by 2nd coordnation sphere carbonq) according to  Review on the Degradation Mechanisms of Metal-N‑C Catalysts for
+# metals = ["Pt", "Pd"]
+metals =  ["Pt"]
+dopants = ["B"] #?????????????? Oxygen aswell could be a good dopant but need to be bound to second coordination sphere carbon to stop 2e- pathway (FeN4 shows good 4e- as o-o bond cleaved by 2nd coordnation sphere carbonq) according to  Review on the Degradation Mechanisms of Metal-N‑C Catalysts for
 # the Oxygen Reduction Reaction in Acid Electrolyte: Current
 # Understanding and Mitigation Approaches
-
 run_structures = generate_input_files(metals, base_dir, dopants)
 
 # resources = "56:1:xeon56:50h"
@@ -151,6 +134,7 @@ run_logger("Starting workflow", str(__file__), "info")
 # Should have an end workflow somewhere
 
 # TODO NOTEESSS!!
+print('MUST COMMENT OUT SECTION BELOW FOR ACTUAL RUN')
 
 # test_run_structs = []
 # for i in run_structures:
@@ -209,18 +193,13 @@ total_count = zigzag_count + bulk_count + armchair_count
 run_logger(f"Starting counts - bulk count {{{bulk_count}}}, zigzag count {{{zigzag_count}}}, armchair count {{{armchair_count}}} - Total {{{total_count}}}", str(__file__), "info")
 run_logger(f"metals {metals}, dopants {dopants}", str(__file__), "info")
 
-# 32 structures per dopant
-# 35 base structures
-
-# print(len(t2_data[2]['all_run_structures']))
+print(len(t2_data[2]['all_run_structures']))
 # print(len(t2_data))
-# exit()
+exit()
 for idx, t1_data in enumerate(t1_data.values()):  # type: ignore
-    # print(len(all_structures[idx * len(metals)]))
-    # exit()
     t1 = Task(str(syn_stab_run_e_c), t1_data, resources=xeon40)
     t2_wfs = []
-    for structure in all_structures[idx * len(metals)].values():
+    for structure in all_structures[idx * len(metals) + 1].values():
         t2 = Task(
             str(syn_stab_run_e_xc),
             structure,
