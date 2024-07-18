@@ -343,7 +343,7 @@ def gather_structs(data: dict) -> dict:
        data (dict): Dictionary containing the run structure, base directory and metal.
 
     Returns:
-       dict: Dictionary containing the run structure, base directory and metal.
+       workflow_data: Dictionary containing the run structure, base directory and metal.
     """
     workflow_data = {}
     run_structures = data["all_run_structures"]
