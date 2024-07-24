@@ -19,7 +19,7 @@ def e_m_on_c(data: dict, vasp_parameters: dict) -> bool:
         vasp_parameters (dict): Dictionary containing the VASP parameters.
 
     Returns:
-        converged (bool): True if all the SCF calculations have converged, False otherwise.
+        True if all the SCF calculations have converged, False otherwise.
     """
     skimmed_data = data.copy()
     del skimmed_data["all_run_structures"]
@@ -37,6 +37,12 @@ def e_m_on_c(data: dict, vasp_parameters: dict) -> bool:
             f"{metal}",
         )
     )
+    if os.path.exists(e_m_on_c_dir / "OUTCAR.opt"):
+        outcar = Path(e_m_on_c_dir) / "OUTCAR.opt"
+        skimmed_data["name"] = f"{carbon_structure}_0N_0H"
+        run_logger(f"e_m_on_c calculation already exists for {metal} on {carbon_structure}.", str(__file__), "info")
+        print(f"e_m_on_c calculation already exists for {metal} on {carbon_structure}.")
+        return True
     e_m_on_c_dir.mkdir(parents=True, exist_ok=True)
     struct_dir = Path(
         os.path.join(
@@ -57,10 +63,10 @@ def e_m_on_c(data: dict, vasp_parameters: dict) -> bool:
         os.chdir(cwd)
         return True
     else:
-        run_logger("e_m_on_c calculation did not converge.", str(__file__), "error")
-        print("e_m_on_c calculation did not converge.")
+        run_logger(f"e_m_on_c calculation did not converge for {metal} on {carbon_structure}.", str(__file__), "error")
+        print(f"e_m_on_c calculation did not converge for {metal} on {carbon_structure}.")
         os.chdir(cwd)
-        return False
+        raise ValueError(f"e_m_on_c calculation did not converge for {metal} on {carbon_structure}.")
 
 
 def main(**data: dict) -> tuple[bool, dict]:
@@ -80,9 +86,11 @@ def main(**data: dict) -> tuple[bool, dict]:
         Perqueue return tuple.
     """
     vasp_parameters = vasp_input()
+    metals = data["metals"]
+    del data["metals"]
     converged = e_m_on_c(data, vasp_parameters)
-    workflow_data = gather_structs(data)
-    return converged, workflow_data
+    workflow_data = gather_structs(data, metals)
+    return True, workflow_data
 
 
 if __name__ == "__main__":

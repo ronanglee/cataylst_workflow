@@ -4,12 +4,14 @@ import os
 from pathlib import Path
 
 from ase.calculators.vasp import Vasp  # type: ignore
+from typing import Optional # type: ignore
 from ase.io import read  # type: ignore
 from utils import (  # type: ignore
     check_electronic,
     check_ion,
     read_and_write_database,
     run_logger,
+    magmons
 )
 from vasp_input import vasp_input  # type: ignore
 
@@ -68,22 +70,19 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
             or folders[n] == "BEEF-vdW"
         ):
             break
-    metal = folders[n + 2]
-    magmom = float(folders[n + 3])
     solvation = folders[n + 12]
-    # general parameters for vasp calculation
     params = vasp_input()
     paramscopy = params.copy()
     calc = Vasp(**paramscopy)
-
     # start the vasp calculations
     err = 0
     control_ion = 0
     converged = False
     atoms = read("init.POSCAR")
+    mag = magmons()
     for atom in atoms:
-        if atom.symbol == metal:
-            atom.magmom = magmom
+        if atom.symbol in mag.keys():
+            atom.magmom = mag[atom.symbol]
     # static calculation always at the beginning
     params["istart"] = (
         0  # strart from being from scratch (ISTART determins whether or not to read the WAVECAR file)
@@ -111,7 +110,6 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
             "INCAR",
             "POSCAR",
             "POTCAR",
-            "KPOINTS",
             "CONTCAR",
             "OUTCAR",
             "OSZICAR",
@@ -120,61 +118,57 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
         ]:
             os.system("cp %s %s.%s" % (f, f, ext))
         # relax and dipole correction without solvation
-        while control_ion == 0:
-            atoms = read("CONTCAR")
-            params["istart"] = 0
-            params["icharg"] = 1
-            params["ldipol"] = True
-            params["idipol"] = 3
-            params["dipol"] = atoms.get_center_of_mass(scaled=True)
-            if solvation == "vac":
-                params["isif"] = 4
-                params["lwave"] = False
-                params["lcharg"] = True
-                params["nsw"] = 50
-                params["ldipol"] = False
-            elif solvation == "implicit":
-                params["isif"] = 4
-                params["lwave"] = True
-                params["lcharg"] = True
-                params["nsw"] = 50
-            calc2 = calc
-            paramscopy = params.copy()
-            calc2 = Vasp(**paramscopy)
-            atoms.set_calculator(calc2)
-            atoms.get_potential_energy()
-            """Check if a vasp calculation (eletronic self consistance) is converged"""
-            nelm = calc2.int_params["nelm"]
-            control_electronic = check_electronic(nelm)
-            if control_electronic == 0:
-                print("Error: electronic scf")
+        atoms = read("CONTCAR")
+        for atom in atoms:
+            if atom.symbol in mag.keys():
+                atom.magmom = mag[atom.symbol]
+        params["istart"] = 0
+        params["icharg"] = 1
+        params["ldipol"] = True
+        params["idipol"] = 3
+        params["dipol"] = atoms.get_center_of_mass(scaled=True)
+        if solvation == "vac":
+            params["isif"] = 4
+            params["lwave"] = False
+            params["lcharg"] = True
+            params["nsw"] = 50
+            params["ldipol"] = False
+        elif solvation == "implicit":
+            params["isif"] = 4
+            params["lwave"] = True
+            params["lcharg"] = True
+            params["nsw"] = 50
+        calc2 = calc
+        paramscopy = params.copy()
+        calc2 = Vasp(**paramscopy)
+        atoms.set_calculator(calc2)
+        atoms.get_potential_energy()
+        """Check if a vasp calculation (eletronic self consistance) is converged"""
+        nelm = calc2.int_params["nelm"]
+        control_electronic = check_electronic(nelm)
+        if control_electronic == 0:
+            print("Error: electronic scf")
+            control_ion = 1
+            err = 1
+        else:
+            """Check if a reasonable geometry"""
+            control_geometry = check_geometry(cwd)
+            if control_geometry == 0:
+                print("Error: structure disintegrates")
                 control_ion = 1
                 err = 1
             else:
-                """Check if a reasonable geometry"""
-                control_geometry = check_geometry(cwd)
-                if control_geometry == 0:
-                    print("Error: structure disintegrates")
-                    control_ion = 1
-                    err = 1
-                else:
-                    """Check if force converged"""
-                    nsw = calc2.int_params["nsw"]
-                    control_ion = check_ion(nsw)
-                    if control_ion == 1:
-                        ext = "preRDip"
-                        for f in [
-                            "INCAR",
-                            "POSCAR",
-                            "POTCAR",
-                            "KPOINTS",
-                            "CONTCAR",
-                            "OUTCAR",
-                            "OSZICAR",
-                            "vasp.out",
-                            "WAVECAR",
-                        ]:
-                            os.system("cp %s %s.%s" % (f, f, ext))
+                ext = "preRDip"
+                for f in [
+                    "INCAR",
+                    "POSCAR",
+                    "POTCAR",
+                    "CONTCAR",
+                    "OUTCAR",
+                    "OSZICAR",
+                    "vasp.out",
+                ]:
+                    os.system("cp %s %s.%s" % (f, f, ext))
         # clean up
         for f in ["DOSCAR", "EIGENVAL", "PROCAR", "vasprun.xml"]:
             os.system("rm %s" % f)
@@ -182,8 +176,8 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
         control_ion = 0
         atoms = read("CONTCAR.preRDip")
         for atom in atoms:
-            if atom.symbol == metal:
-                atom.magmom = magmom
+            if atom.symbol in mag.keys():
+                atom.magmom = mag[atom.symbol]
         # static calculation always at the beginning
         params["nsw"] = 0
         params["isif"] = 0
@@ -218,7 +212,6 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
                 "INCAR",
                 "POSCAR",
                 "POTCAR",
-                "KPOINTS",
                 "CONTCAR",
                 "OUTCAR",
                 "OSZICAR",
@@ -226,72 +219,72 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
             ]:
                 os.system("cp %s %s.%s" % (f, f, ext))
             # relax and dipole correction with solvation
-            while control_ion == 0:
-                atoms = read("CONTCAR")
-                params["icharg"] = 1
-                params["nsw"] = 50
-                params["ldipol"] = True
-                params["idipol"] = 3
-                params["dipol"] = atoms.get_center_of_mass(scaled=True)
-                params["isif"] = 0
-                if solvation == "implicit":
-                    params["istart"] = 1
-                    params["lsol"] = True
-                    params["eb_k"] = 80
-                    params["lwave"] = True
-                    params["lcharg"] = True
-                else:
-                    params["istart"] = 0
-                    params["lwave"] = False
-                    params["lcharg"] = True
-                calc4 = calc
-                paramscopy = params.copy()
-                calc4 = Vasp(**paramscopy)
-                atoms.set_calculator(calc4)
-                atoms.get_potential_energy()
-                """Check if a vasp electronic calculation is converged"""
-                nelm = calc4.int_params["nelm"]
-                control_electronic = check_electronic(nelm)  # check electronic scf
-                if control_electronic == 0:
-                    print("Error: electronic scf")
+            atoms = read("CONTCAR")
+            for atom in atoms:
+                if atom.symbol in mag.keys():
+                    atom.magmom = mag[atom.symbol]
+            params["icharg"] = 1
+            params["nsw"] = 9999
+            params["ldipol"] = True
+            params["idipol"] = 3
+            params["dipol"] = atoms.get_center_of_mass(scaled=True)
+            params["isif"] = 0
+            if solvation == "implicit":
+                params["istart"] = 1
+                params["lsol"] = True
+                params["eb_k"] = 80
+                params["lwave"] = True
+                params["lcharg"] = True
+            else:
+                params["istart"] = 0
+                params["lwave"] = False
+                params["lcharg"] = True
+            calc4 = calc
+            paramscopy = params.copy()
+            calc4 = Vasp(**paramscopy)
+            atoms.set_calculator(calc4)
+            atoms.get_potential_energy()
+            """Check if a vasp electronic calculation is converged"""
+            nelm = calc4.int_params["nelm"]
+            control_electronic = check_electronic(nelm)  # check electronic scf
+            if control_electronic == 0:
+                print("Error: electronic scf")
+                control_ion = 1
+                err = 1
+            else:
+                """Check if a vasp ion calculation is converged"""
+                control_geometry = check_geometry(
+                    cwd
+                )  # check matal-N and/or dopant-nb distance from CONTCAR
+                if control_geometry == 0:
+                    print("Error: structure disintegrates")
                     control_ion = 1
                     err = 1
                 else:
-                    """Check if a vasp ion calculation is converged"""
-                    control_geometry = check_geometry(
-                        cwd
-                    )  # check matal-N and/or dopant-nb distance from CONTCAR
-                    if control_geometry == 0:
-                        print("Error: structure disintegrates")
-                        control_ion = 1
-                        err = 1
-                    else:
-                        """Check if force converged"""
-                        nsw = calc4.int_params["nsw"]
-                        control_ion = check_ion(nsw)
-                        if control_ion == 1:
-                            ext = "RDip"
-                            for f in [
-                                "INCAR",
-                                "POSCAR",
-                                "POTCAR",
-                                "KPOINTS",
-                                "CONTCAR",
-                                "OUTCAR",
-                                "OSZICAR",
-                                "vasp.out",
-                            ]:
-                                os.system("cp %s %s.%s" % (f, f, ext))
-                            converged = True
-                            outcar = Path(cwd) / "OUTCAR.RDip"
-                            data["name"] = str(Path(data["run_structure"]).stem)
-                            if "implicit" in str(cwd):
-                                read_and_write_database(
-                                    outcar, "pristine_implicit", data
-                                )
-                            elif "vac" in str(cwd):
-                                del data["pq_index"]
-                                read_and_write_database(outcar, "pristine_vac", data)
+                    """Check if force converged"""
+                    nsw = calc4.int_params["nsw"]
+                    control_ion = check_ion(nsw)
+                    if control_ion == 1:
+                        ext = "RDip"
+                        for f in [
+                            "INCAR",
+                            "POSCAR",
+                            "POTCAR",
+                            "CONTCAR",
+                            "OUTCAR",
+                            "OSZICAR",
+                            "vasp.out",
+                        ]:
+                            os.system("cp %s %s.%s" % (f, f, ext))
+                        converged = True
+                        outcar = Path(cwd) / "OUTCAR.RDip"
+                        data["name"] = str(Path(data["run_structure"]).stem)
+                        if "implicit" in str(cwd):
+                            read_and_write_database(
+                                outcar, "pristine_implicit", data
+                            )
+                        elif "vac" in str(cwd):
+                            read_and_write_database(outcar, "pristine_vac", data)
             # clean up
             for f in [
                 "CHG",
@@ -301,7 +294,6 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
                 "DOSCAR",
                 "EIGENVAL",
                 "PROCAR",
-                "vasprun.xml",
             ]:
                 os.system("rm %s" % f)
 
@@ -310,13 +302,13 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
         return True
     else:
         run_logger(
-            "Adsorbate relaxation calculation did not converge.", str(__file__), "error"
+            f"Adsorbate relaxation calculation did not converge in {cwd}.", str(__file__), "error"
         )
         print(f"Adsorbate relaxation calculation is not done in {cwd}")
-        return False
+        raise ValueError(f"Adsorbate relaxation calculation is not done in {cwd}")
 
 
-def main(**data: dict) -> tuple[bool, dict] | tuple[bool, None]:
+def main(**data: dict) -> tuple[bool, Optional[dict]]:
     """Run vac and implicit prisitine structures.
 
     Args:
@@ -329,14 +321,20 @@ def main(**data: dict) -> tuple[bool, dict] | tuple[bool, None]:
     prisitine_dir = Path(str(data["pristine"]))
     vac_dir = prisitine_dir / "vac" / "vasp_rx"
     implicit_dir = prisitine_dir / "implicit" / "vasp_rx"
+    copy_data = data.copy()
     controls = []
+    del copy_data["pq_index"]
     for directory in [vac_dir, implicit_dir]:
         os.chdir(directory)
-        controls.append(relax_pristine(directory, data))
+        if os.path.exists("OUTCAR.RDip"):
+            controls.append(True)
+            continue
+        else:
+            controls.append(relax_pristine(directory, copy_data))
     os.chdir(cwd)
-    del data["pristine"]
+    del copy_data["pristine"]
     if all(controls):
-        return True, data
+        return True, copy_data
     else:
         return False, None
 

@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 from ase.build import add_adsorbate  # type: ignore
+from typing import Optional # type: ignore
 from ase.calculators.vasp import Vasp  # type: ignore
 from ase.db import connect  # type: ignore
 from ase.io import read, write  # type: ignore
@@ -11,6 +12,7 @@ from utils import (  # type: ignore
     check_ion,
     read_and_write_database,
     run_logger,
+    magmons
 )
 from vasp_input import vasp_input  # type: ignore
 
@@ -329,10 +331,7 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
             or folders[n] == "BEEF-vdW"
         ):
             break
-    metal = folders[n + 2]
-    magmom = float(folders[n + 3])
     solvation = folders[n + 12]
-    name = folders[n + 10]
     params = vasp_input()
     paramscopy = params.copy()
     calc = Vasp(**paramscopy)
@@ -346,9 +345,10 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
         if ii == 0:
             control_ion = 0
             atoms = read("initial_adsorbate.POSCAR")
+            mag = magmons()
             for atom in atoms:
-                if atom.symbol == metal:
-                    atom.magmom = magmom
+                if atom.symbol in mag.keys():
+                    atom.magmom = mag[atom.symbol]
             # static calculation always at the beginning
             params["istart"] = 0  # strart from being from scratch
             params["icharg"] = 2  # take superposition of atomic charge density
@@ -370,9 +370,6 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
                 control_ion = 1
                 err = 1
             else:
-                # initial adsoption site
-                initial_system = read("inital.POSCAR")
-                x_ads, y_ads, z_ads = adsorbsite(initial_system, metal, name)
                 adsorbate_id = get_adsorbateid(cwd)
                 slab = read("CONTCAR")
                 for i in range(len(adsorbate_id)):
@@ -390,84 +387,70 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
                     "INCAR",
                     "POSCAR",
                     "POTCAR",
-                    "KPOINTS",
                     "CONTCAR",
                     "OUTCAR",
                     "OSZICAR",
                     "vasp.out",
-                    "WAVECAR",
                 ]:
                     os.system("cp %s %s.%s" % (f, f, ext))
             # relax and dipole correction calculation
-            while control_ion == 0:
-                atoms = read("CONTCAR")
-                params["istart"] = 0  # not to read WAVECAR
-                params["icharg"] = 1  # restrat from CHGCAR
-                params["ldipol"] = True
-                params["idipol"] = 3
-                params["dipol"] = atoms.get_center_of_mass(scaled=True)
-                if solvation == "implicit":
-                    params["isif"] = 0
-                    params["lwave"] = True
-                    params["lcharg"] = True
-                    params["nsw"] = 50
-                else:
-                    params["isif"] = 0
-                    params["lwave"] = False
-                    params["lcharg"] = True
-                    params["nsw"] = 50
-                calc2 = calc
-                paramscopy = params.copy()
-                calc2 = Vasp(**paramscopy)
-                atoms.set_calculator(calc2)
-                print("(%d) optimization calculation" % ii)
-                atoms.get_potential_energy()
-                """Check if a vasp calculation is converged"""
-                nelm = calc2.int_params["nelm"]
-                control_electronic = check_electronic(nelm)
-                if control_electronic == 0:
-                    print("Error: electronic scf")
+            atoms = read("CONTCAR")
+            for atom in atoms:
+                if atom.symbol in mag.keys():
+                    atom.magmom = mag[atom.symbol]
+            params["istart"] = 0  # not to read WAVECAR
+            params["icharg"] = 1  # restrat from CHGCAR
+            params["ldipol"] = True
+            params["idipol"] = 3
+            params["dipol"] = atoms.get_center_of_mass(scaled=True)
+            if solvation == "implicit":
+                params["isif"] = 0
+                params["lwave"] = True
+                params["lcharg"] = True
+                params["nsw"] = 50
+            else:
+                params["isif"] = 0
+                params["lwave"] = False
+                params["lcharg"] = True
+                params["nsw"] = 50
+            calc2 = calc
+            paramscopy = params.copy()
+            calc2 = Vasp(**paramscopy)
+            atoms.set_calculator(calc2)
+            print("(%d) optimization calculation" % ii)
+            atoms.get_potential_energy()
+            """Check if a vasp calculation is converged"""
+            nelm = calc2.int_params["nelm"]
+            control_electronic = check_electronic(nelm)
+            if control_electronic == 0:
+                print("Error: electronic scf")
+                control_ion = 1
+                err = 1
+            else:
+                control_geometry = check_geometry(cwd, adsorbate_id)
+                if control_geometry == 0:
+                    print("Error: structure disintegrates")
                     control_ion = 1
                     err = 1
                 else:
-                    control_geometry = check_geometry(cwd, adsorbate_id)
-                    if control_geometry == 0:
-                        print("Error: structure disintegrates")
-                        control_ion = 1
-                        err = 1
-                    else:
-                        """Check if force converged"""
-                        nsw = calc2.int_params["nsw"]
-                        control_ion = check_ion(nsw)
-                        if control_ion == 1:
-                            if solvation == "implicit":
-                                ext = "preRDip"
-                                for f in [
-                                    "INCAR",
-                                    "POSCAR",
-                                    "POTCAR",
-                                    "KPOINTS",
-                                    "CONTCAR",
-                                    "OUTCAR",
-                                    "OSZICAR",
-                                    "vasp.out",
-                                    "WAVECAR",
-                                ]:
-                                    os.system("cp %s %s.%s" % (f, f, ext))
-                            else:
-                                ext = "RDip"
-                                for f in [
-                                    "INCAR",
-                                    "POSCAR",
-                                    "POTCAR",
-                                    "KPOINTS",
-                                    "CONTCAR",
-                                    "OUTCAR",
-                                    "OSZICAR",
-                                    "vasp.out",
-                                    "WAVECAR",
-                                ]:
-                                    os.system("cp %s %s.%s" % (f, f, ext))
+                    """Check if force converged"""
+                    nsw = calc2.int_params["nsw"]
+                    control_ion = check_ion(nsw)
+                    if control_ion == 1:
+                        if solvation == "implicit":
+                            ext = "preRDip"
+                        else:
+                            ext = "RDip"
+                        for f in [
+                            "INCAR",
+                            "POSCAR",
+                            "POTCAR",
+                            "CONTCAR",
+                            "OUTCAR",
+                            "OSZICAR",
+                            "vasp.out",
+                        ]:
+                            os.system("cp %s %s.%s" % (f, f, ext))
             # clean up
             for f in ["DOSCAR", "EIGENVAL", "PROCAR", "vasprun.xml"]:
                 os.system("rm %s" % f)
@@ -476,66 +459,68 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
             os.system("cp CONTCAR.preRDip CONTCAR")
             os.system("cp WAVECAR.preRDip WAVECAR")
             # relaxation with solvation and dipole correction
-            while control_ion == 0:
-                atoms = read("CONTCAR")
-                params["istart"] = 1  # start from WAVECAR in vaccum
-                params["nsw"] = 50
-                params["ldipol"] = True
-                params["idipol"] = 3
-                params["dipol"] = atoms.get_center_of_mass(scaled=True)
-                params["isif"] = 0
-                params["lwave"] = True
-                params["lcharg"] = True
-                params["lsol"] = True
-                params["eb_k"] = 80
-                params["isif"] = 0
-                calc4 = calc
-                paramscopy = params.copy()
-                calc4 = Vasp(**paramscopy)
-                atoms.set_calculator(calc4)
-                print("(%d) optimization calculation" % ii)
-                atoms.get_potential_energy()
-                """Check if a vasp electronic calculation is converged"""
-                nelm = calc4.int_params["nelm"]
-                control_electronic = check_electronic(nelm)  # check electronic scf
-                if control_electronic == 0:
-                    print("Error: electronic scf")
+            atoms = read("CONTCAR")
+            for atom in atoms:
+                if atom.symbol in mag.keys():
+                    atom.magmom = mag[atom.symbol]
+            params["istart"] = 1  # start from WAVECAR in vaccum
+            params["nsw"] = 500
+            params["ldipol"] = True
+            params["idipol"] = 3
+            params["dipol"] = atoms.get_center_of_mass(scaled=True)
+            params["isif"] = 0
+            params["lwave"] = True
+            params["lcharg"] = True
+            params["lsol"] = True
+            params["eb_k"] = 80
+            params["isif"] = 0
+            calc4 = calc
+            paramscopy = params.copy()
+            calc4 = Vasp(**paramscopy)
+            atoms.set_calculator(calc4)
+            print("(%d) optimization calculation" % ii)
+            atoms.get_potential_energy()
+            """Check if a vasp electronic calculation is converged"""
+            nelm = calc4.int_params["nelm"]
+            control_electronic = check_electronic(nelm)  # check electronic scf
+            if control_electronic == 0:
+                print("Error: electronic scf")
+                control_ion = 1
+                err = 1
+            else:
+                """Check if a vasp ion calculation is converged"""
+                control_geometry = check_geometry(cwd, adsorbate_id)
+                if control_geometry == 0:
+                    print("Error: structure disintegrates")
                     control_ion = 1
                     err = 1
                 else:
-                    """Check if a vasp ion calculation is converged"""
-                    control_geometry = check_geometry(cwd, adsorbate_id)
-                    if control_geometry == 0:
-                        print("Error: structure disintegrates")
-                        control_ion = 1
-                        err = 1
-                    else:
-                        """Check if force converged"""
-                        nsw = calc4.int_params["nsw"]
-                        control_ion = check_ion(nsw)
-                        if control_ion == 1:
-                            ext = "RDip"
-                            for f in [
-                                "INCAR",
-                                "POSCAR",
-                                "POTCAR",
-                                "KPOINTS",
-                                "CONTCAR",
-                                "OUTCAR",
-                                "OSZICAR",
-                                "vasp.out",
-                            ]:
-                                os.system("cp %s %s.%s" % (f, f, ext))
-                                converged = True
+                    """Check if force converged"""
+                    nsw = calc4.int_params["nsw"]
+                    control_ion = check_ion(nsw)
+                    if control_ion == 1:
+                        ext = "RDip"
+                        for f in [
+                            "INCAR",
+                            "POSCAR",
+                            "POTCAR",
+                            "CONTCAR",
+                            "OUTCAR",
+                            "OSZICAR",
+                            "vasp.out",
+                        ]:
+                            os.system("cp %s %s.%s" % (f, f, ext))
+                            converged = True
             # clean up
             for f in [
                 "CHG",
                 "CHGCAR",
                 "WAVECAR",
+                "POSCAR",
+                "CONTCAR",
                 "DOSCAR",
                 "EIGENVAL",
                 "PROCAR",
-                "vasprun.xml",
             ]:
                 os.system("rm %s" % f)
             outcar = Path(cwd) / "OUTCAR.RDip"
@@ -550,13 +535,13 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
         return True
     else:
         run_logger(
-            "Adsorbate relaxation calculation is not converged", str(__file__), "error"
+            f"Adsorbate relaxation calculation is not converged in {cwd}.", str(__file__), "error"
         )
-        print("Adsorbate relaxation calculation is not converged")
-        return False
+        print(f"Adsorbate relaxation calculation is not converged in {cwd}.")
+        raise ValueError(f"Adsorbate relaxation calculation is not converged in {cwd}.")
 
 
-def main(**data: dict) -> tuple[bool, dict] | tuple[bool, None]:
+def main(**data: dict) -> tuple[bool, Optional[dict]]:
     """Run vac and implicit prisitine structures.
 
     Args:
@@ -569,7 +554,10 @@ def main(**data: dict) -> tuple[bool, dict] | tuple[bool, None]:
     ooh_dir = Path(str(data["adsorbate"])) / "implicit" / "vasp_rx"
     os.chdir(ooh_dir)
     place_adsorbate(ooh_dir, data)
-    control = relax_adsorbate(ooh_dir, data)
+    if os.path.exists('OUTCAR.RDip'):
+        control = True
+    else:
+        control = relax_adsorbate(ooh_dir, data)
     os.chdir(cwd)
     if control:
         return True, data

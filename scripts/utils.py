@@ -36,7 +36,7 @@ def check_electronic(set_nelm: int) -> int:
 
 def check_ion(set_nsw: int) -> int:
     """Open OUTCAR and check NSW
-
+ad
     Args:
        set_nsw (int): NSW in INCAR
 
@@ -336,11 +336,12 @@ def operating_stability_run_vasp(
         return False
 
 
-def gather_structs(data: dict) -> dict:
+def gather_structs(data: dict, metals: list) -> dict:
     """Gather all the structures for next part of workflow.
 
     Args:
        data (dict): Dictionary containing the run structure, base directory and metal.
+       metals (list): List of metals.
 
     Returns:
        workflow_data: Dictionary containing the run structure, base directory and metal.
@@ -353,20 +354,44 @@ def gather_structs(data: dict) -> dict:
     wanted_structures = []
     for struc_path in run_structures:
         structure = read(Path(struc_path) / Path("init.POSCAR"))
-        struc_metal: str = "Pt"
-        if structure[35].symbol == struc_metal:
+        if structure[35].symbol in metals:
             cs = "armchair"
-        elif structure[45].symbol == struc_metal or structure[38].symbol == struc_metal:
+        elif structure[45].symbol in metals or structure[38].symbol in metals:
             cs = "zigzag"
-        elif structure[62].symbol == struc_metal:
+        elif structure[62].symbol in metals:
             cs = "bulk"
-        if carbon_structure == cs:
+        if carbon_structure == cs and metal in structure.get_chemical_symbols():
             wanted_structures.append(struc_path)
     idx = 0
     for struc_path in wanted_structures:
         structure = read(Path(struc_path) / Path("init.POSCAR"))
-        if dopants and "B" in structure.get_chemical_symbols():
+        
+        
+        if 'S' in structure.get_chemical_symbols() and 'B' in structure.get_chemical_symbols():
+            workflow_data[idx] = {
+                "base_dir": data["base_dir"],
+                "run_structure": str(struc_path).replace("Pt", metal),
+                "carbon_structure": carbon_structure,
+                "metal": metal,
+                "dopant": "SB",
+            }
+            idx += 1
+        elif 'O' in structure.get_chemical_symbols():
+            workflow_data[idx] = {
+                "base_dir": data["base_dir"],
+                "run_structure": str(struc_path).replace("Pt", metal),
+                "carbon_structure": carbon_structure,
+                "metal": metal,
+                "dopant": "O",
+            }
+            idx += 1
+        elif dopants and "B" in structure.get_chemical_symbols():
+            new_dopants = []
             for dopant in dopants:
+                if dopant != 'O':
+                    if dopant != 'SB':
+                        new_dopants.append(dopant)       
+            for dopant in new_dopants:
                 data = {
                     "base_dir": data["base_dir"],
                     "run_structure": str(
@@ -537,7 +562,8 @@ def get_xch_structs(data: list) -> None:
                 indices[atom.index] = atom.symbol
     no_metal = structure.copy()
     del no_metal[[atom.index for atom in structure if atom.symbol == metal]]
-    for h in range(1, len(indices) + 1):
+    # for h in range(1, len(indices) + 1):
+    for h in range(1, 4): # doing only 3 Hs as 4 very unlikey to adsorb
         no_metal_copy = no_metal.copy()
         idicess = []
         for atom in no_metal:
@@ -548,7 +574,8 @@ def get_xch_structs(data: list) -> None:
                     idxx = 0
                     combos = []
                     for p in perm:
-                        if idxx < 5 - h:
+                        # if idxx < 5 - h:
+                        if idxx <  1:
                             combos.append(p)
                         idxx += 1
                     for idx, combo in enumerate(combos):

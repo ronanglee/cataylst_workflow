@@ -30,13 +30,19 @@ def e_xc(data: dict, vasp_parameters: dict) -> bool:
     run_dir.mkdir(exist_ok=True, parents=True)
     structure = read(os.path.join(struc_path, "init.POSCAR"))
     if dopant != "":
-        for atom in structure:
-            if atom.symbol == "B":
-                atom.symbol = dopant
+        if dopant != 'O':
+            if dopant != 'SB':
+                for atom in structure:
+                    if atom.symbol == "B":
+                        atom.symbol = dopant
     del structure[[atom.symbol == metal for atom in structure]]
     remove_metal_dir = run_dir / Path(str(struc_path.stem).replace(metal, "M"))
     remove_metal_dir.mkdir(exist_ok=True, parents=True)
     structure.write(remove_metal_dir / "init.POSCAR")
+    if os.path.exists(remove_metal_dir / "OUTCAR.opt"):
+        outcar = Path(remove_metal_dir) / "OUTCAR.opt"
+        data["name"] = str(Path(data["run_structure"]).stem).replace(metal, "M")
+        return True
     converged = synthesis_stability_run_vasp(remove_metal_dir, vasp_parameters, "e_xc")
     if converged:
         outcar = Path(remove_metal_dir) / "OUTCAR.opt"
@@ -46,8 +52,7 @@ def e_xc(data: dict, vasp_parameters: dict) -> bool:
     else:
         run_logger("e_xc calculation did not converge.", str(__file__), "error")
         print("e_xc calculation did not converge.")
-        return False
-
+        raise ValueError("e_xc calculation did not converge.")
 
 def main(**data: dict) -> tuple[bool, None]:
     """Run the synthesis stability part of the workflow.
@@ -62,9 +67,7 @@ def main(**data: dict) -> tuple[bool, None]:
     """
     cwd = os.getcwd()
     vasp_parameters = vasp_input()
-    idx, *_ = data[INDEX_KW]
-    idx = str(idx)
-    converged = e_xc(data[idx], vasp_parameters)  # type: ignore
+    converged = e_xc(data, vasp_parameters)  # type: ignore
     os.chdir(cwd)
     return converged, None
 

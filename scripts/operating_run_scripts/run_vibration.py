@@ -11,6 +11,8 @@ from utils import (  # type: ignore
     check_electronic,
     get_vibrational_correction,
     run_logger,
+    check_ion,
+    magmons
 )
 from vasp_input import vasp_input  # type: ignore
 
@@ -86,7 +88,6 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
         ):
             break
     metal = folders[n + 2]
-    magmom = float(folders[n + 3])
     solvation = folders[n + 12]
     params = vasp_input()
     paramscopy = params.copy()
@@ -102,9 +103,10 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
     init_atoms = read(Path(cwd).parent / "vasp_rx" / "CONTCAR.RDip")
     write("initial_ads.POSCAR", init_atoms)
     atoms = read("initial_ads.POSCAR")
+    mag = magmons()
     for atom in atoms:
-        if atom.symbol == metal:
-            atom.magmom = magmom
+        if atom.symbol in mag.keys():
+            atom.magmom = mag[atom.symbol]
     # static calculation always at the beginning
     params["istart"] = 0  # strart from being from scratch
     params["icharg"] = 2  # take superposition of atomic charge density
@@ -112,6 +114,7 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
     params["lcharg"] = True
     params["lwave"] = False
     params["isif"] = 0
+    params['ediff'] = 1e-06
     calc1 = calc
     paramscopy = params.copy()
     calc1 = Vasp(**paramscopy)
@@ -131,16 +134,17 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
             "INCAR",
             "POSCAR",
             "POTCAR",
-            "KPOINTS",
             "CONTCAR",
             "OUTCAR",
             "OSZICAR",
             "vasp.out",
-            "WAVECAR",
         ]:
             os.system("cp %s %s.%s" % (f, f, ext))
         # dipole correction calculation
         atoms = read("CONTCAR")
+        for atom in atoms:
+            if atom.symbol in mag.keys():
+                atom.magmom = mag[atom.symbol]
         params["istart"] = 0  # not to read WAVECAR
         params["icharg"] = 1  # restrat from CHGCAR
         params["ldipol"] = True
@@ -168,20 +172,18 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
                 "INCAR",
                 "POSCAR",
                 "POTCAR",
-                "KPOINTS",
                 "CONTCAR",
                 "OUTCAR",
                 "OSZICAR",
                 "vasp.out",
-                "WAVECAR",
             ]:
                 os.system("cp %s %s.%s" % (f, f, ext))
             atoms = read("CONTCAR.preRDip")
+            for atom in atoms:
+                if atom.symbol in mag.keys():
+                    atom.magmom = mag[atom.symbol]
             # dipole calculation + solvation
             os.system("cp WAVECAR.preRDip WAVECAR")
-            for atom in atoms:
-                if atom.symbol == metal:
-                    atom.magmom = magmom
             params["istart"] = 1
             params["nsw"] = 9999
             params["ldipol"] = True
@@ -210,7 +212,6 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
                     "INCAR",
                     "POSCAR",
                     "POTCAR",
-                    "KPOINTS",
                     "CONTCAR",
                     "OUTCAR",
                     "OSZICAR",
@@ -222,13 +223,16 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
     if err == 0:
         print("#vibration calculation")
         atoms = read("CONTCAR.RDip")
+        for atom in atoms:
+            if atom.symbol in mag.keys():
+                atom.magmom = mag[atom.symbol]
         os.system("cp WAVECAR.RDip WAVECAR")
         params["istart"] = 1
         params["ldipol"] = True
         params["idipol"] = 3
         params["dipol"] = atoms.get_center_of_mass(scaled=True)
         params["isif"] = 0
-        params["nsw"] = 0
+        params["nsw"] = 999
         if solvation == "implicit":
             params["lsol"] = True
             params["eb_k"] = 80
@@ -246,50 +250,51 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
             print("Error: electronic scf")
             err = 1
         else:
-            ext = "vib"
-            for f in [
-                "INCAR",
-                "POSCAR",
-                "POTCAR",
-                "KPOINTS",
-                "CONTCAR",
-                "OUTCAR",
-                "OSZICAR",
-                "vasp.out",
-            ]:
-                os.system("cp %s %s.%s" % (f, f, ext))
-            vibindices = adsorbate_id
-            vib = Vibrations(atoms, indices=vibindices, name="vib", delta=0.01, nfree=2)
-            vib.run()
-            vib.get_energies()
-            vib.summary(log="vibration.txt")
-            for i in range(3 * len(vibindices)):
-                vib.write_mode(i)
-            correction = get_vibrational_correction()
-            database[struc_name]["correction"] = correction
-            add_entry(
-                os.path.join(data_base_folder, "ads_vib_corrections.json"), database
-            )
-            # clean up
-            for f in [
-                "CHG",
-                "CHGCAR",
-                "WAVECAR",
-                "DOSCAR",
-                "EIGENVAL",
-                "PROCAR",
-                "vasprun.xml",
-            ]:
-                os.system("rm %s" % f)
-            converged = True
+            nsw = calc4.int_params["nsw"]
+            control_ion = check_ion(nsw)
+            if control_ion == 1:
+                ext = "vib"
+                for f in [
+                    "INCAR",
+                    "POSCAR",
+                    "POTCAR",
+                    "CONTCAR",
+                    "OUTCAR",
+                    "OSZICAR",
+                    "vasp.out",
+                ]:
+                    os.system("cp %s %s.%s" % (f, f, ext))
+                vibindices = adsorbate_id
+                vib = Vibrations(atoms, indices=vibindices, name="vib", delta=0.01, nfree=2)
+                vib.run()
+                vib.get_energies()
+                vib.summary(log="vibration.txt")
+                for i in range(3 * len(vibindices)):
+                    vib.write_mode(i)
+                correction = get_vibrational_correction()
+                database[struc_name]["correction"] = correction
+                add_entry(
+                    os.path.join(data_base_folder, "ads_vib_corrections.json"), database
+                )
+                # clean up
+                for f in [
+                    "CHG",
+                    "CHGCAR",
+                    "WAVECAR",
+                    "DOSCAR",
+                    "EIGENVAL",
+                    "PROCAR",
+                ]:
+                    os.system("rm %s" % f)
+                converged = True
 
     if converged:
         return True
     else:
-        run_logger("Vibration calculation did not converge.", str(__file__), "error")
-        print("Vibration calculation did not converge.")
-        return False
-
+        run_logger(f"Vibration calculation did not converge in {cwd}.", str(__file__), "error")
+        print(f"Vibration calculation did not converge in {cwd}.")
+        raise ValueError(f"Vibration calculation did not converge in {cwd}.")
+ 
 
 def main(**data: dict) -> tuple[bool, None]:
     """Run the vibration part of the workflow.
@@ -303,10 +308,13 @@ def main(**data: dict) -> tuple[bool, None]:
     cwd = os.getcwd()
     vib_dir = Path(str(data["adsorbate"])) / "implicit" / "vibration"
     os.chdir(vib_dir)
-    control_vibration = calc_vibration(vib_dir, data)
+    if os.path.exists("vibration.txt"):
+        control_vibration = True
+    else:
+        control_vibration = calc_vibration(vib_dir, data)
     os.chdir(cwd)
     del data["adsorbate"]
-    return control_vibration, None
+    return control_vibration, data
 
 
 if __name__ == "__main__":

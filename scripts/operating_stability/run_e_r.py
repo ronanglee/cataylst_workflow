@@ -1,609 +1,306 @@
-# """Code taken and refactored from Tiaporn"""
+"""Code taken and refactored from Tiaporn"""
+import numpy as np # type: ignore
+import json
+import os
+from ase.db import connect # type: ignore
+from pathlib import Path # type: ignore
+from utils import run_logger, add_entry # type: ignore
 
-# import glob
-# import json
-# import os
-# import re
+# constant
+kb = 8.617e-5  # Boltzmann constant in eV/K
+h = 4.136e-15  # Planck constant in eV*s
+T = 298.15  # Temperature in K
+k = kb * T * np.log(10)
+conc = 10**-6  # concentration of metal ion
 
-# import matplotlib.pyplot as plt
-# import numpy as np
-# from ase.db import connect
-# from ase.io import read
-# from get_ooh import main_ooh
-# from matplotlib.patches import Patch
-# from zero_h_synthesis_vals import get_gradient_vals
+# gas molecules at T = 298.15 K, p = 1 bar
+# eV/molecule (EDFT + ZPE + H - TS + BEEF correction)
+g_h2 = -7.128  # eV/molecule (Free energy + BEEF correction)
+g_h2o = -12.869  # eV/molecule (Free energy + BEEF correction)
+database_dir = Path(__file__).parent.parent.parent / "runs" / "databases"
 
+ph = 0
+u = 0.7
 
-# def call_db(sac):
-#     db = connect(f"/home/energy/rogle/datasets/orr_complete_data/oh_databases/{sac}.db")
-#     return db
+def acid_stability(ph: float, u: float, m: str, g_mn4: float, h_master: dict, g_mn4_ooh: float) -> list:
+    """Calculate the relative stability of the intermediates.
+    
+    Args:
+        ph: The pH of the solution.
+        u: The applied potential.
+        m: The metal.
+        g_mn4: The energy of the metal ion.
+        h_master: The energies of the hydrogen intermediates.
+        g_mn4_ooh: The energy of the metal ion in the OOH intermediate.
+    
+    Returns:
+        b_rel: The relative stability of the bare surface.
+        ooh_rel: The relative stability of the OOH intermediate.
+    """
+    db_metals = connect(os.path.join(database_dir, "e_m.db"))
+    g_m = db_metals.get(metal=m).energy / len(db_metals.get_atoms(metal=m)) # ev/atom
+    dg = [9999] * 42 # initialise more than needed just in case an element has a lot of rxns
+    g_ch0 = list(h_master.values())[0]
+    g_ch1 = list(h_master.values())[1]
+    g_ch2 = list(h_master.values())[2]
+    g_ch3 = list(h_master.values())[3]
+    g_ch4 = list(h_master.values())[4]
+    # all these rxns can be found in the publised paper "Effects of electrolyte anion adsorption on the activity and stability of single atom electrocatalysts: Patniboon, Hansen"
+    # "DOI: 10.1063/5.0125654"
+    if m == "Pd":
+        g_m2 = g_m + 2 * (0.951 + (1 / 2) * 0.0592 * np.log10(conc)) 
+        # 1. dissolution to m+2
+        dg[1] = g_m2 + g_ch0 - g_mn4 - 2 * u - 0.0 * g_h2 + 0 * k * ph
+        dg[2] = g_m2 + g_ch1 - g_mn4 - 1 * u - 0.5 * g_h2 + 1 * k * ph
+        dg[3] = g_m2 + g_ch2 - g_mn4 - 0 * u - 1.0 * g_h2 + 2 * k * ph
+        dg[4] = g_m2 + g_ch3 - g_mn4 + 1 * u - 1.5 * g_h2 + 3 * k * ph
+        dg[5] = g_m2 + g_ch4 - g_mn4 + 2 * u - 2.0 * g_h2 + 4 * k * ph
+    elif m == "Pt":
+        g_m2 = g_m + 2 * (1.18 + (1 / 2) * 0.0592 * np.log10(conc))  
+        # 1. dissolution to m+2
+        dg[1] = g_m2 + g_ch0 - g_mn4 - 2 * u - 0.0 * g_h2 + 0 * k * ph
+        dg[2] = g_m2 + g_ch1 - g_mn4 - 1 * u - 0.5 * g_h2 + 1 * k * ph
+        dg[3] = g_m2 + g_ch2 - g_mn4 - 0 * u - 1.0 * g_h2 + 2 * k * ph
+        dg[4] = g_m2 + g_ch3 - g_mn4 + 1 * u - 1.5 * g_h2 + 3 * k * ph
+        dg[5] = g_m2 + g_ch4 - g_mn4 + 2 * u - 2.0 * g_h2 + 4 * k * ph
+    elif m == 'Cr':
+        g_m2 = g_m + 2*(-0.913 + (1/2)*0.0592*np.log10(conc))
+        g_m3 = g_m + 3*(-0.744 + (1/3)*0.0592*np.log10(conc)) 
+        g_moh2 = g_m3 + g_h2o - 0.5*g_h2 + 3.81*k            
+        g_hmo4_1 = g_m3 + 4*g_h2o + 3*(1.350) - (7/2)*g_h2    
+        g_mo4_2 = g_m3 + 4*g_h2o + 3*(1.477) - 4*g_h2         
+        # 1. dissolution to m+2
+        dg[1] = g_m2 + g_ch0 - g_mn4 - 2*u - 0.0*g_h2 + 0*k*ph
+        dg[2] = g_m2 + g_ch1 - g_mn4 - 1*u - 0.5*g_h2 + 1*k*ph
+        dg[3] = g_m2 + g_ch2 - g_mn4 - 0*u - 1.0*g_h2 + 2*k*ph
+        dg[4] = g_m2 + g_ch3 - g_mn4 + 1*u - 1.5*g_h2 + 3*k*ph
+        dg[5] = g_m2 + g_ch4 - g_mn4 + 2*u - 2.0*g_h2 + 4*k*ph
+        # 2. dissolution to m+3
+        dg[6] = g_m3 + g_ch0 - g_mn4 - 3*u
+        dg[7] = g_m3 + g_ch1 - g_mn4 - 2*u - 0.5*g_h2 + 1*k*ph
+        dg[8] = g_m3 + g_ch2 - g_mn4 - 1*u - 1.0*g_h2 + 2*k*ph
+        dg[9] = g_m3 + g_ch3 - g_mn4 - 0*u - 1.5*g_h2 + 3*k*ph
+        dg[10] = g_m3 + g_ch4 - g_mn4 + 1*u - 2.0*g_h2 + 4*k*ph
+        # 3. dissolution to g_moh2
+        dg[11] = (g_moh2 + 0.5*g_h2 - g_h2o - k*ph) + g_ch0 - g_mn4 - 3*u
+        dg[12] = (g_moh2 + 0.5*g_h2 - g_h2o - k*ph) + g_ch1 - g_mn4 - 2*u - 0.5*g_h2 + 1*k*ph
+        dg[13] = (g_moh2 + 0.5*g_h2 - g_h2o - k*ph) + g_ch2 - g_mn4 - 1*u - 1.0*g_h2 + 2*k*ph
+        dg[14] = (g_moh2 + 0.5*g_h2 - g_h2o - k*ph) + g_ch3 - g_mn4 - 0*u - 1.5*g_h2 + 3*k*ph
+        dg[15] = (g_moh2 + 0.5*g_h2 - g_h2o - k*ph) + g_ch4 - g_mn4 + 1*u - 2.0*g_h2 + 4*k*ph
+        # 5. dissolution to g_hmo4_1
+        dg[16] = (g_hmo4_1 + (7/2)*g_h2 - 7*k*ph - 3*u - 4*g_h2o) + g_ch0 - g_mn4 - 3*u
+        dg[17] = (g_hmo4_1 + (7/2)*g_h2 - 7*k*ph - 3*u - 4*g_h2o) + g_ch1 - g_mn4 - 2*u - 0.5*g_h2 + 1*k*ph
+        dg[18] = (g_hmo4_1 + (7/2)*g_h2 - 7*k*ph - 3*u - 4*g_h2o) + g_ch2 - g_mn4 - 1*u - 1.0*g_h2 + 2*k*ph
+        dg[19] = (g_hmo4_1 + (7/2)*g_h2 - 7*k*ph - 3*u - 4*g_h2o) + g_ch3 - g_mn4 - 0*u - 1.5*g_h2 + 3*k*ph
+        dg[20] = (g_hmo4_1 + (7/2)*g_h2 - 7*k*ph - 3*u - 4*g_h2o) + g_ch4 - g_mn4 + 1*u - 2.0*g_h2 + 4*k*ph
+        # 6. dissolution to g_mo4_2
+        dg[21] = (g_mo4_2 + 4*g_h2 - 8*k*ph - 3 * u - 4*g_h2o) + g_ch0 - g_mn4 - 3*u
+        dg[22] = (g_mo4_2 + 4*g_h2 - 8*k*ph - 3*u - 4*g_h2o) + g_ch1 - g_mn4 - 2*u - 0.5*g_h2 + 1*k*ph
+        dg[23] = (g_mo4_2 + 4*g_h2 - 8*k*ph - 3*u - 4*g_h2o) + g_ch2 - g_mn4 - 1*u - 1.0*g_h2 + 2*k*ph
+        dg[24] = (g_mo4_2 + 4*g_h2 - 8*k*ph - 3*u - 4*g_h2o) + g_ch3 - g_mn4 - 0*u - 1.5*g_h2 + 3*k*ph
+        dg[25] = (g_mo4_2 + 4*g_h2 - 8*k*ph - 3*u - 4*g_h2o) + g_ch4 - g_mn4 + 1*u - 2.0*g_h2 + 4*k*ph
+    elif m == 'Mn':
+        g_m2 = g_m + 2*(-1.185 + (1/2)*0.0592*np.log10(conc))  
+        g_m3 = g_m2 + 1.5415                                   
+        g_mo4_2 = g_m2 + 4*g_h2o - 4*g_h2 + 4*(1.742)          
+        g_mo4_1 = g_m2 + 4*g_h2o - 4*g_h2 + 5*(1.507)          
+        g_mo4_3 = g_mo4_2 - 0.27                               
+        # 1. dissolution to m+2
+        dg[1] = g_m2 + g_ch0 - g_mn4 - 2*u - 0.0*g_h2 + 0*k*ph
+        dg[2] = g_m2 + g_ch1 - g_mn4 - 1*u - 0.5*g_h2 + 1*k*ph
+        dg[3] = g_m2 + g_ch2 - g_mn4 - 0*u - 1.0*g_h2 + 2*k*ph
+        dg[4] = g_m2 + g_ch3 - g_mn4 + 1*u - 1.5*g_h2 + 3*k*ph
+        dg[5] = g_m2 + g_ch4 - g_mn4 + 2*u - 2.0*g_h2 + 4*k*ph
+        # 2. dissolution to m+3
+        dg[6] = g_m3 + g_ch0 - g_mn4 - 3*u
+        dg[7] = g_m3 + g_ch1 - g_mn4 - 2*u - 0.5*g_h2 + 1*k*ph
+        dg[8] = g_m3 + g_ch2 - g_mn4 - 1*u - 1.0*g_h2 + 2*k*ph
+        dg[9] = g_m3 + g_ch3 - g_mn4 - 0*u - 1.5*g_h2 + 3*k*ph
+        dg[10] = g_m3 + g_ch4 - g_mn4 + 1*u - 2.0*g_h2 + 4*k*ph
+        # 3. dissolution to g_mo4_2
+        dg[11] = (g_mo4_2 + 4*g_h2 - 8*k*ph - 4*u - 4*g_h2o) + g_ch0 - g_mn4 - 2*u - 0.0*g_h2 + 0*k*ph
+        dg[12] = (g_mo4_2 + 4*g_h2 - 8*k*ph - 4*u - 4*g_h2o) + g_ch1 - g_mn4 - 1*u - 0.5*g_h2 + 1*k*ph
+        dg[13] = (g_mo4_2 + 4*g_h2 - 8*k*ph - 4*u - 4*g_h2o) + g_ch2 - g_mn4 - 0*u - 1.0*g_h2 + 2*k*ph
+        dg[14] = (g_mo4_2 + 4*g_h2 - 8*k*ph - 4*u - 4*g_h2o) + g_ch3 - g_mn4 + 1*u - 1.5*g_h2 + 3*k*ph
+        dg[15] = (g_mo4_2 + 4*g_h2 - 8*k*ph - 4*u - 4*g_h2o) + g_ch4 - g_mn4 + 2*u - 2.0*g_h2 + 4*k*ph
+        # 5. dissolution to g_mo4_1
+        dg[16] = (g_mo4_1 + 4*g_h2 - 8*k*ph - 5*u - 4*g_h2o) + g_ch0 - g_mn4 - 2*u - 0.0*g_h2 + 0*k*ph
+        dg[17] = (g_mo4_1 + 4*g_h2 - 8*k*ph - 5*u - 4*g_h2o) + g_ch1 - g_mn4 - 1*u - 0.5*g_h2 + 1*k*ph
+        dg[18] = (g_mo4_1 + 4*g_h2 - 8*k*ph - 5*u - 4*g_h2o) + g_ch2 - g_mn4 - 0*u - 1.0*g_h2 + 2*k*ph
+        dg[19] = (g_mo4_1 + 4*g_h2 - 8*k*ph - 5*u - 4*g_h2o) + g_ch3 - g_mn4 + 1*u - 1.5*g_h2 + 3*k*ph
+        dg[20] = (g_mo4_1 + 4*g_h2 - 8*k*ph - 5*u - 4*g_h2o) + g_ch4 - g_mn4 + 2*u - 2.0*g_h2 + 4*k*ph
+        # 5. dissolution to g_mo4_3
+        dg[21] = ((g_mo4_3 + u) + 4*g_h2 - 8*k*ph - 4*u - 4*g_h2o) + g_ch0 - g_mn4 - 2*u - 0.0*g_h2 + 0*k*ph
+        dg[22] = ((g_mo4_3 + u) + 4*g_h2 - 8*k*ph - 4*u - 4*g_h2o) + g_ch1 - g_mn4 - 1*u - 0.5*g_h2 + 1*k*ph
+        dg[23] = ((g_mo4_3 + u) + 4*g_h2 - 8*k*ph - 4*u - 4*g_h2o) + g_ch2 - g_mn4 - 0*u - 1.0*g_h2 + 2*k*ph
+        dg[24] = ((g_mo4_3 + u) + 4*g_h2 - 8*k*ph - 4*u - 4*g_h2o) + g_ch3 - g_mn4 + 1*u - 1.5*g_h2 + 3*k*ph
+        dg[25] = ((g_mo4_3 + u) + 4*g_h2 - 8*k*ph - 4*u - 4*g_h2o) + g_ch4 - g_mn4 + 2*u - 2.0*g_h2 + 4*k*ph
+    elif m == 'Fe':
+        g_m2 = g_m + 2*(-0.447 + (1/2)*0.0592*np.log10(conc))  
+        g_m3 = g_m + 3*(-0.037 + (1/3)*0.0592*np.log10(conc))  
+        g_hmo4_1 = g_m3 + 4*g_h2o - (3/2)*g_h2 + 3*(2.07)      
+        g_mo4_2 = g_m3 + 4*g_h2o + 3*(2.20) - 4*g_h2           
+        g_moh2 = g_m3 + g_h2o - 0.5*g_h2 + 2.43*k              
+        g_hmo2_1 = g_m2 + 2*g_h2o - (3/2)*g_h2 + 31.58*k       
+        g_mo2_1 = g_hmo2_1 - (1/2)*g_h2 - 0.685                
+        # 1. dissolution to m+2
+        dg[1] = g_m2 + g_ch0 - g_mn4 - 2*u - 0.0*g_h2 + 0*k*ph
+        dg[2] = g_m2 + g_ch1 - g_mn4 - 1*u - 0.5*g_h2 + 1*k*ph
+        dg[3] = g_m2 + g_ch2 - g_mn4 - 0*u - 1.0*g_h2 + 2*k*ph
+        dg[4] = g_m2 + g_ch3 - g_mn4 + 1*u - 1.5*g_h2 + 3*k*ph
+        dg[5] = g_m2 + g_ch4 - g_mn4 + 2*u - 2.0*g_h2 + 4*k*ph
+        # 2. dissolution to m+3
+        dg[6] = g_m3 + g_ch0 - g_mn4 - 3*u
+        dg[7] = g_m3 + g_ch1 - g_mn4 - 2*u - 0.5*g_h2 + 1*k*ph
+        dg[8] = g_m3 + g_ch2 - g_mn4 - 1*u - 1.0*g_h2 + 2*k*ph
+        dg[9] = g_m3 + g_ch3 - g_mn4 - 0*u - 1.5*g_h2 + 3*k*ph
+        dg[10] = g_m3 + g_ch4 - g_mn4 + 1*u - 2.0*g_h2 + 4*k*ph
+        # 3. dissolution to hmo4_1
+        dg[11] = (g_hmo4_1 - 4*g_h2o + (3/2)*g_h2 - 7*k*ph - 3*u) + g_ch0 - g_mn4 - 3*u
+        dg[12] = (g_hmo4_1 - 4*g_h2o + (3/2)*g_h2 - 7*k*ph - 3*u) + g_ch1 - g_mn4 - 2*u - 0.5*g_h2 + 1*k*ph
+        dg[13] = (g_hmo4_1 - 4*g_h2o + (3/2)*g_h2 - 7*k*ph - 3*u) + g_ch2 - g_mn4 - 1*u - 1.0*g_h2 + 2*k*ph
+        dg[14] = (g_hmo4_1 - 4*g_h2o + (3/2)*g_h2 - 7*k*ph - 3*u) + g_ch3 - g_mn4 - 0*u - 1.5*g_h2 + 3*k*ph
+        dg[15] = (g_hmo4_1 - 4*g_h2o + (3/2)*g_h2 - 7*k*ph - 3*u) + g_ch4 - g_mn4 + 1*u - 2.0*g_h2 + 4*k*ph
+        # 4. dissolution to mo4_2
+        dg[16] = (g_mo4_2 + 4*g_h2 - 8*k*ph - 3*u - 4*g_h2o) + g_ch0 - g_mn4 - 3*u
+        dg[17] = (g_mo4_2 + 4*g_h2 - 8*k*ph - 3*u - 4*g_h2o) + g_ch1 - g_mn4 - 2*u - 0.5*g_h2 + 1*k*ph
+        dg[18] = (g_mo4_2 + 4*g_h2 - 8*k*ph - 3*u - 4*g_h2o) + g_ch2 - g_mn4 - 1*u - 1.0*g_h2 + 2*k*ph
+        dg[19] = (g_mo4_2 + 4*g_h2 - 8*k*ph - 3*u - 4*g_h2o) + g_ch3 - g_mn4 - 0*u - 1.5*g_h2 + 3*k*ph
+        dg[20] = (g_mo4_2 + 4*g_h2 - 8*k*ph - 3*u - 4*g_h2o) + g_ch4 - g_mn4 + 1*u - 2.0*g_h2 + 4*k*ph     
+        # 5. dissolution to moh2
+        dg[21] = (g_moh2 + 0.5*g_h2 - g_h2o - k*ph) + g_ch0 - g_mn4 - 3*u
+        dg[22] = (g_moh2 + 0.5*g_h2 - g_h2o - k*ph) + g_ch1 - g_mn4 - 2*u - 0.5*g_h2 + 1*k*ph
+        dg[23] = (g_moh2 + 0.5*g_h2 - g_h2o - k*ph) + g_ch2 - g_mn4 - 1*u - 1.0*g_h2 + 2*k*ph
+        dg[24] = (g_moh2 + 0.5*g_h2 - g_h2o - k*ph) + g_ch3 - g_mn4 - 0*u - 1.5*g_h2 + 3*k*ph
+        dg[25] = (g_moh2 + 0.5*g_h2 - g_h2o - k*ph) + g_ch4 - g_mn4 + 1*u - 2.0*g_h2 + 4*k*ph 
+        # 6. dissolution to hmo2_1
+        dg[26] = (g_hmo2_1 - 2*g_h2o + (3/2)*g_h2 - 3*k*ph) + g_ch0 - g_mn4 - 2*u - 0.0*g_h2 + 0*k*ph
+        dg[27] = (g_hmo2_1 - 2*g_h2o + (3/2)*g_h2 - 3*k*ph) + g_ch1 - g_mn4 - 1*u - 0.5*g_h2 + 1*k*ph
+        dg[28]= (g_hmo2_1 - 2*g_h2o + (3/2)*g_h2 - 3*k*ph) + g_ch2 - g_mn4 - 0*u - 1.0*g_h2 + 2*k*ph
+        dg[29] = (g_hmo2_1 - 2*g_h2o + (3/2)*g_h2 - 3*k*ph) + g_ch3 - g_mn4 + 1*u - 1.5*g_h2 + 3*k*ph
+        dg[30] = (g_hmo2_1 - 2*g_h2o + (3/2)*g_h2 - 3*k*ph) + g_ch4 - g_mn4 + 2*u - 2.0*g_h2 + 4*k*ph
+        # 7. dissolution to mo2_1
+        dg[31] = ((g_mo2_1 - (1/2)*g_h2 - 1*k*ph) - 2*g_h2o + (3/2)*g_h2 - 3*k*ph) + g_ch0 - g_mn4 - 2*u - 0.0*g_h2 + 0*k*ph
+        dg[32] = ((g_mo2_1 - (1/2)*g_h2 - 1*k*ph) - 2*g_h2o + (3/2)*g_h2 - 3*k*ph) + g_ch1 - g_mn4 - 1*u - 0.5*g_h2 + 1*k*ph
+        dg[33] = ((g_mo2_1 - (1/2)*g_h2 - 1*k*ph) - 2*g_h2o + (3/2)*g_h2 - 3*k*ph) + g_ch2 - g_mn4 - 0*u - 1.0*g_h2 + 2*k*ph
+        dg[34] = ((g_mo2_1 - (1/2)*g_h2 - 1*k*ph) - 2*g_h2o + (3/2)*g_h2 - 3*k*ph) + g_ch3 - g_mn4 + 1*u - 1.5*g_h2 + 3*k*ph
+        dg[35] = ((g_mo2_1 - (1/2)*g_h2 - 1*k*ph) - 2*g_h2o + (3/2)*g_h2 - 3*k*ph) + g_ch4 - g_mn4 + 2*u - 2.0*g_h2 + 4*k*ph
+    elif m == 'Co':
+        g_m2 = g_m + 2*(-0.28 + (1/2)*0.0592*np.log10(conc))   
+        g_m3 = g_m2 + 1.92                                     
+        g_hmo2_1 = g_m2 + 2*g_h2o - (3/2)*g_h2 + 31.70*k       
+        # 1. dissolution to m+2
+        dg[1] = g_m2 + g_ch0 - g_mn4 - 2*u - 0.0*g_h2 + 0*k*ph
+        dg[2] = g_m2 + g_ch1 - g_mn4 - 1*u - 0.5*g_h2 + 1*k*ph
+        dg[3] = g_m2 + g_ch2 - g_mn4 - 0*u - 1.0*g_h2 + 2*k*ph
+        dg[4] = g_m2 + g_ch3 - g_mn4 + 1*u - 1.5*g_h2 + 3*k*ph
+        dg[5] = g_m2 + g_ch4 - g_mn4 + 2*u - 2.0*g_h2 + 4*k*ph
+        # 2. dissolution to m+3
+        dg[6] = g_m3 + g_ch0 - g_mn4 - 3*u
+        dg[7] = g_m3 + g_ch1 - g_mn4 - 2*u - 0.5*g_h2 + 1*k*ph
+        dg[8] = g_m3 + g_ch2 - g_mn4 - 1*u - 1.0*g_h2 + 2*k*ph
+        dg[9] = g_m3 + g_ch3 - g_mn4 - 0*u - 1.5*g_h2 + 3*k*ph
+        dg[10] = g_m3 + g_ch4 - g_mn4 + 1*u - 2.0*g_h2 + 4*k*ph
+        # 3. dissolution to hmo2_1
+        dg[11] = (g_hmo2_1 + (3/2)*g_h2 - 3*k*ph - 2*g_h2o) + g_ch0 - g_mn4 - 2*u - 0.0*g_h2 + 0*k*ph
+        dg[12] = (g_hmo2_1 + (3/2)*g_h2 - 3*k*ph - 2*g_h2o) + g_ch1 - g_mn4 - 1*u - 0.5*g_h2 + 1*k*ph
+        dg[13] = (g_hmo2_1 + (3/2)*g_h2 - 3*k*ph - 2*g_h2o) + g_ch2 - g_mn4 - 0*u - 1.0*g_h2 + 2*k*ph
+        dg[14] = (g_hmo2_1 + (3/2)*g_h2 - 3*k*ph - 2*g_h2o) + g_ch3 - g_mn4 + 1*u - 1.5*g_h2 + 3*k*ph
+        dg[15] = (g_hmo2_1 + (3/2)*g_h2 - 3*k*ph - 2*g_h2o) + g_ch4 - g_mn4 + 2*u - 2.0*g_h2 + 4*k*ph
+    elif m == 'Ni':
+        g_m2 = g_m + 2*(-0.26 + (1/2)*0.0592*np.log10(conc))   
+        g_m3 = g_m2 + 2.30                                     
+        g_hmo2_1 = g_m2 + 2*g_h2o - (3/2)*g_h2 + 30.40*k       
+        # 1. dissolution to m+2
+        dg[1] = g_m2 + g_ch0 - g_mn4 - 2*u - 0.0*g_h2 + 0*k*ph
+        dg[2] = g_m2 + g_ch1 - g_mn4 - 1*u - 0.5*g_h2 + 1*k*ph
+        dg[3] = g_m2 + g_ch2 - g_mn4 - 0*u - 1.0*g_h2 + 2*k*ph
+        dg[4] = g_m2 + g_ch3 - g_mn4 + 1*u - 1.5*g_h2 + 3*k*ph
+        dg[5] = g_m2 + g_ch4 - g_mn4 + 2*u - 2.0*g_h2 + 4*k*ph
+        # 2. dissolution to m+3
+        dg[6] = g_m3 + g_ch0 - g_mn4 - 3*u
+        dg[7] = g_m3 + g_ch1 - g_mn4 - 2*u - 0.5*g_h2 + 1*k*ph
+        dg[8] = g_m3 + g_ch2 - g_mn4 - 1*u - 1.0*g_h2 + 2*k*ph
+        dg[9] = g_m3 + g_ch3 - g_mn4 - 0*u - 1.5*g_h2 + 3*k*ph
+        dg[10] = g_m3 + g_ch4 - g_mn4 + 1*u - 2.0*g_h2 + 4*k*ph
+        # 3. dissolution to hmo2_1
+        dg[11] = (g_hmo2_1 + (3/2)*g_h2 - 3*k*ph - 2*g_h2o) + g_ch0 - g_mn4 - 2*u - 0.0*g_h2 + 0*k*ph
+        dg[12] = (g_hmo2_1 + (3/2)*g_h2 - 3*k*ph - 2*g_h2o) + g_ch1 - g_mn4 - 1*u - 0.5*g_h2 + 1*k*ph
+        dg[13] = (g_hmo2_1 + (3/2)*g_h2 - 3*k*ph - 2*g_h2o) + g_ch2 - g_mn4 - 0*u - 1.0*g_h2 + 2*k*ph
+        dg[14] = (g_hmo2_1 + (3/2)*g_h2 - 3*k*ph - 2*g_h2o) + g_ch3 - g_mn4 + 1*u - 1.5*g_h2 + 3*k*ph
+        dg[15] = (g_hmo2_1 + (3/2)*g_h2 - 3*k*ph - 2*g_h2o) + g_ch4 - g_mn4 + 2*u - 2.0*g_h2 + 4*k*ph
+    else:
+        raise ValueError(f"Metal {m} not supported")
+    dg[0] = 0 # bare surface
+    dg[41] = g_mn4_ooh + (1.5 * g_h2) - 1 * k * ph - 1 * u - g_mn4 - (2 * g_h2o)
 
-
-# with open(
-#     "/home/energy/rogle/asm_orr_rxn/check_if_structures_are_avoided/avoid.json", "r"
-# ) as f:
-#     avoid_motifs = json.load(f)
-
-# with open(r"ooh_etc_thermal_corrections.json", "r") as f:
-#     thermal_corrections = json.load(f)
-
-# with open(r"new_corrected_carbon_sheet_thermal_corrections.json", "r") as f:
-#     corrected_carbon_sheet_thermal_corrections = json.load(f)
-
-# # constant
-# kB = 8.617e-5  # Boltzmann constant in eV/K
-# h = 4.136e-15  # Planck constant in eV*s
-# T = 298.15  # Temperature in K
-# k = kB * T * np.log(10)
-# conc = 10**-6  # concentration of metal ion
-# RT = 0.0257149  # at T = 298.15K
-
-# # gas molecules at T = 298.15 K, p = 1 bar
-# # eV/molecule (EDFT + ZPE + H - TS + BEEF correction)
-# G_H2 = -7.128  # eV/molecule (Free energy + BEEF correction)
-# G_H2O = -12.869  # eV/molecule (Free energy + BEEF correction)
-
-
-# def acid_stability(
-#     pH,
-#     u,
-#     m,
-#     G_MN4,
-#     G_CH0,
-#     G_CH1,
-#     G_CH2,
-#     G_CH3,
-#     G_CH4,
-#     G_MN4_H2O,
-#     G_MN4_OH,
-#     G_MN4_O,
-#     G_MN4_H,
-#     G_MN4_OOH,
-# ):
-#     if m == "Pd":
-#         G_M = -1.96  # ev/atom
-#         G_M2 = G_M + 2 * (0.951 + (1 / 2) * 0.0592 * np.log10(conc))  # 1
-#         # 1. dissolution to M+2
-#         dg1 = G_M2 + G_CH0 - G_MN4 - 2 * u - 0.0 * G_H2 + 0 * k * pH
-#         dg2 = G_M2 + G_CH1 - G_MN4 - 1 * u - 0.5 * G_H2 + 1 * k * pH
-#         dg3 = G_M2 + G_CH2 - G_MN4 - 0 * u - 1.0 * G_H2 + 2 * k * pH
-#         dg4 = G_M2 + G_CH3 - G_MN4 + 1 * u - 1.5 * G_H2 + 3 * k * pH
-#         dg5 = G_M2 + G_CH4 - G_MN4 + 2 * u - 2.0 * G_H2 + 4 * k * pH
-#         dg6 = dg7 = dg8 = dg9 = dg10 = 9999
-#         dg11 = dg12 = dg13 = dg14 = dg15 = 9999
-#         dg16 = dg17 = dg18 = dg19 = dg20 = 9999
-#         dg21 = dg22 = dg23 = dg24 = dg25 = 9999
-#         dg26 = dg27 = dg28 = dg29 = dg30 = 9999
-#         dg31 = dg32 = dg33 = dg34 = dg35 = 9999
-#         dg36 = dg37 = dg38 = dg39 = dg40 = 9999
-#     elif m == "Pt":
-#         G_M = -3.13  # eV/atom
-#         G_M2 = G_M + 2 * (1.18 + (1 / 2) * 0.0592 * np.log10(conc))  # 1
-#         # 1. dissolution to M+2
-#         dg1 = G_M2 + G_CH0 - G_MN4 - 2 * u - 0.0 * G_H2 + 0 * k * pH
-#         dg2 = G_M2 + G_CH1 - G_MN4 - 1 * u - 0.5 * G_H2 + 1 * k * pH
-#         dg3 = G_M2 + G_CH2 - G_MN4 - 0 * u - 1.0 * G_H2 + 2 * k * pH
-#         dg4 = G_M2 + G_CH3 - G_MN4 + 1 * u - 1.5 * G_H2 + 3 * k * pH
-#         dg5 = G_M2 + G_CH4 - G_MN4 + 2 * u - 2.0 * G_H2 + 4 * k * pH
-#         dg6 = dg7 = dg8 = dg9 = dg10 = 9999
-#         dg11 = dg12 = dg13 = dg14 = dg15 = 9999
-#         dg16 = dg17 = dg18 = dg19 = dg20 = 9999
-#         dg21 = dg22 = dg23 = dg24 = dg25 = 9999
-#         dg26 = dg27 = dg28 = dg29 = dg30 = 9999
-#         dg31 = dg32 = dg33 = dg34 = dg35 = 9999
-#         dg36 = dg37 = dg38 = dg39 = dg40 = 9999
-
-#     dg0 = 0
-#     dg41 = G_MN4_H2O - G_MN4 - G_H2O
-#     dg42 = G_MN4_OH + 0.5 * G_H2 - 1 * k * pH - u - G_MN4 - G_H2O
-#     dg43 = G_MN4_O + G_H2 - 2 * k * pH - 2 * u - G_MN4 - G_H2O
-#     dg44 = G_MN4_H - G_MN4 - 0.5 * G_H2 + 1 * k * pH + u
-#     # ooh + (1.5 * G_H2) - np - (2*G_H2O) + data['data'][string] + 0.2
-#     dg45 = G_MN4_OOH + (1.5 * G_H2) - 1 * k * pH - 1 * u - G_MN4 - (2 * G_H2O)
-
-#     dg = [
-#         dg0,
-#         dg1,
-#         dg2,
-#         dg3,
-#         dg4,
-#         dg5,
-#         dg6,
-#         dg7,
-#         dg8,
-#         dg9,
-#         dg10,
-#         dg11,
-#         dg12,
-#         dg13,
-#         dg14,
-#         dg15,
-#         dg16,
-#         dg17,
-#         dg18,
-#         dg19,
-#         dg20,
-#         dg21,
-#         dg22,
-#         dg23,
-#         dg24,
-#         dg25,
-#         dg26,
-#         dg27,
-#         dg28,
-#         dg29,
-#         dg30,
-#         dg31,
-#         dg32,
-#         dg33,
-#         dg34,
-#         dg35,
-#         dg36,
-#         dg37,
-#         dg38,
-#         dg39,
-#         dg40,
-#         dg41,
-#         dg42,
-#         dg43,
-#         dg44,
-#         dg45,
-#     ]
-#     return dg
-
-
-# def acid_stability_H2O(
-#     pH,
-#     u,
-#     m,
-#     G_MN4,
-#     G_MN4_O,
-#     G_MN4_OH,
-#     G_CH0,
-#     G_CH1,
-#     G_CH2,
-#     G_CH3,
-#     G_CH4,
-#     G_MN4_H2O,
-#     G_MN4_H,
-#     G_MN4_OOH,
-# ):
-#     dg = acid_stability(
-#         pH,
-#         u,
-#         m,
-#         G_MN4,
-#         G_CH0,
-#         G_CH1,
-#         G_CH2,
-#         G_CH3,
-#         G_CH4,
-#         G_MN4_H2O,
-#         G_MN4_OH,
-#         G_MN4_O,
-#         G_MN4_H,
-#         G_MN4_OOH,
-#     )
-#     react_dict = {
-#         dg[1]: 1,
-#         dg[2]: 1,
-#         dg[3]: 1,
-#         dg[4]: 1,
-#         dg[5]: 1,  # 1
-#         dg[6]: 2,
-#         dg[7]: 2,
-#         dg[8]: 2,
-#         dg[9]: 2,
-#         dg[10]: 2,  # 2
-#         dg[11]: 3,
-#         dg[12]: 3,
-#         dg[13]: 3,
-#         dg[14]: 3,
-#         dg[15]: 3,  # 3
-#         dg[16]: 4,
-#         dg[17]: 4,
-#         dg[18]: 4,
-#         dg[19]: 4,
-#         dg[20]: 4,  # 4
-#         dg[21]: 5,
-#         dg[22]: 5,
-#         dg[23]: 5,
-#         dg[24]: 5,
-#         dg[25]: 5,  # 5
-#         dg[26]: 6,
-#         dg[27]: 6,
-#         dg[28]: 6,
-#         dg[29]: 6,
-#         dg[30]: 6,  # 6
-#         dg[31]: 7,
-#         dg[32]: 7,
-#         dg[33]: 7,
-#         dg[34]: 7,
-#         dg[35]: 7,  # 7
-#         dg[36]: 8,
-#         dg[37]: 8,
-#         dg[38]: 8,
-#         dg[39]: 8,
-#         dg[40]: 8,  # 8
-#         dg[0]: 9,  # bare
-#         dg[41]: 10,  # H2O
-#         dg[42]: 11,  # OH
-#         dg[43]: 12,  # O
-#         dg[44]: 13,  # H
-#         dg[45]: 14,
-#     }  # OOH
-
-#     react = react_dict[min(react_dict)]
-#     return react
-
-
-# def relative_stability_H2O(
-#     pH,
-#     u,
-#     m,
-#     G_MN4,
-#     G_MN4_O,
-#     G_MN4_OH,
-#     G_CH0,
-#     G_CH1,
-#     G_CH2,
-#     G_CH3,
-#     G_CH4,
-#     G_MN4_H2O,
-#     G_MN4_H,
-#     G_MN4_OOH,
-# ):
-#     dg = acid_stability(
-#         pH,
-#         u,
-#         m,
-#         G_MN4,
-#         G_CH0,
-#         G_CH1,
-#         G_CH2,
-#         G_CH3,
-#         G_CH4,
-#         G_MN4_H2O,
-#         G_MN4_OH,
-#         G_MN4_O,
-#         G_MN4_H,
-#         G_MN4_OOH,
-#     )
-#     # relative energy
-#     ref = min(dg[1:41])
-#     B_rel = dg[0] - ref
-#     H2O_rel = dg[41] - ref
-#     OH_rel = dg[42] - ref
-#     O_rel = dg[43] - ref
-#     H_rel = dg[44] - ref
-#     OOH_rel = dg[45] - ref
-#     react_dict = {
-#         B_rel: 0,  # bare
-#         #   H2O_rel: 1,  # *H2O ## not doing water
-#         OH_rel: 2,  # *OH
-#         O_rel: 3,  # *O
-#         H_rel: 4,
-#         OOH_rel: 5,
-#     }  # *H
-#     react_border = react_dict[min(react_dict)]
-#     react = min(B_rel, H2O_rel, OH_rel, O_rel, H_rel)
-#     return (react, react_border, B_rel, H2O_rel, OH_rel, O_rel, H_rel, OOH_rel)
+    ref = min(dg[1:41]) # minimum energy of ionic components
+    b_rel = dg[0] - ref
+    ooh_rel = dg[41] - ref
+    print(dg)
+    return b_rel, ooh_rel
 
 
-# def get_data_corrected_carbon(dictin, sac, label):
-#     sac = sac.replace("Pt", "M")
-#     if label == "CH0":
-#         label = None
-#         joining = f"{sac}"
-#     else:
-#         label = f"_{label}"
-#         joining = f"{sac}{label}"
-#     return dictin["data"][joining]
-
-
-# def get_data_thermal_corrections(dictin, sac, metal, label1, label2):
-#     sac = sac.replace("Pt", "M")
-#     joining = f"{sac}_{metal}_{label1}_{label2}"
-#     return dictin["data"][joining]
-
-
-# def get_coordination_spheres():
-#     sacs = glob.glob(
-#         f"/home/energy/rogle/asm_orr_rxn/local_structure/nanocluster_formation/data/e_mnxc/Pt/PtN*"
-#     )
-#     used_sacs = glob.glob(
-#         f"/home/energy/rogle/asm_orr_rxn/local_structure/nanocluster_formation/data/e_nch_metal_removed/*"
-#     )  # master directory
-#     base_sacs = [i.split("/")[-1] for i in used_sacs]
-
-#     coordination_strings = []
-#     for sac in sacs:
-#         if sac.split("/")[-1] not in base_sacs:
-#             continue
-#         structure = read(f"{sac}/POSCAR.opt")
-#         m_idx = [i for i, x in enumerate(structure.get_chemical_symbols()) if x == "Pt"]
-#         n_idx = [i for i, x in enumerate(structure.get_chemical_symbols()) if x == "N"]
-#         distances = []
-#         for i in m_idx:
-#             for j in n_idx:
-#                 distances.append(structure.get_distance(i, j))
-
-#         sphere_one_ount = 0
-#         sphere_two_count = 0
-#         sphere_three_count = 0
-#         for i in sorted(distances):
-#             if i < 2.6:
-#                 sphere_one_ount += 1
-#             elif i < 3.6 and i > 2.6:
-#                 sphere_two_count += 1
-#             elif i > 3.6:
-#                 sphere_three_count += 1
-#         co_str = f"PtN{sphere_one_ount}+{sphere_two_count}N+{sphere_three_count}N"
-#         coordination_strings.append(co_str)
-
-#     return coordination_strings
-
-
-# def get_all_sacs_stability():
-#     path = "/home/energy/rogle/asm_orr_rxn/local_structure/nanocluster_formation/data/e_nch_metal_removed"
-#     sacs_path = glob.glob(f"{path}/*")
-#     sacs = []
-#     for sac in sacs_path:
-#         basename = os.path.basename(sac)
-#         basename = basename.replace("Pt", "M")
-#         sacs.append(basename)
-#     return sacs
-
-
-# def get_gradient_array(carbon, m):
-#     gradient_array = []
-#     for C in carbon:
-#         gradient_array.append(get_gradient_vals(C, m))
-
-#     x_max = max(gradient_array, key=lambda x: x[0])
-#     y_max = max(gradient_array, key=lambda x: x[1])
-#     x_min = min(gradient_array, key=lambda x: x[0])
-#     y_min = min(gradient_array, key=lambda x: x[1])
-
-#     euc_dis_array = []
-#     dis_max_min = np.sqrt((x_max[0] - x_min[0]) ** 2 + (y_max[1] - y_min[1]) ** 2)
-#     for values in gradient_array:
-#         # find euchlidean distance
-#         euc_dis_array.append(
-#             np.sqrt((values[0] - x_max[0]) ** 2 + (values[1] - y_max[1]) ** 2)
-#             / dis_max_min
-#         )
-#     return euc_dis_array
-
-
-# carbon = get_all_sacs_stability()
-# coordination_spheres = get_coordination_spheres()
-
-# electrolyte = "Bare"
-
-# u_orr = 0.7
-# pH_orr = 0
-
-# colors = ["b", "g", "r", "c", "m", "black", "y", "green"]
-# shapes = [
-#     ".",
-#     "o",
-#     "v",
-#     "^",
-#     "<",
-#     ">",
-#     "1",
-#     "2",
-#     "3",
-#     "4",
-#     "s",
-#     "p",
-#     "*",
-#     "h",
-#     "H",
-#     "+",
-#     "x",
-#     "D",
-#     "d",
-#     "|",
-#     "_",
-#     "P",
-#     "X",
-#     "8",
-#     "d",
-#     "v",
-#     "<",
-#     ">",
-#     "^",
-# ]
-# nitrogen_dict = {3: "blue", 4: "green", 5: "red", 6: "orange", 7: "purple", 8: "brown"}
-
-# metals = ["Pd", "Pt"]
-
-# color_dict = {}
-# shapes_dict = {}
-# for col, m in zip(colors, metals):
-#     color_dict[m] = col
-
-# for C, sphere, shape in zip(carbon, coordination_spheres, shapes):
-#     Gr_orr = []
-#     Gr_orr_name = []
-#     ooh_vals = []
-#     db = call_db(C)
-#     numbers = re.findall(r"\d+", sphere)
-#     n = sum([int(i) for i in numbers])
-#     if "A" in C:
-#         extra_string = f"{m}N{n} (A - {sphere.replace('Pt', '')})"
-#     elif "Z" in C:
-#         extra_string = f"{m}N{n} (Z - {sphere.replace('Pt', '')})"
-#     else:
-#         extra_string = f"{m}N{n} ({sphere.replace('Pt', '')})"
-#     for key in shapes_dict.keys():
-#         if extra_string == key:
-#             indices = len(
-#                 [
-#                     index
-#                     for index, string in enumerate(shapes_dict.keys())
-#                     if extra_string in string
-#                 ]
-#             )
-#             extra_string += f" - {indices+1}"
-#     shapes_dict[extra_string] = shape
-
-
-# def main(metal):
-#     fig, ax = plt.subplots()
-#     annote = []
-#     euc_dis_array = get_gradient_array(carbon, metal)
-#     for idx, C in enumerate(carbon):
-#         ooh_vals = []
-#         db = call_db(C)
-#         continue_loop = False
-#         for key, vals in avoid_motifs["data"].items():
-#             m_c = (
-#                 "MN" + C.split("N", 1)[1]
-#             )  # do only max split of 1 for first occurance of N
-#             if key == m_c and vals == metal:
-#                 print(m_c, metal, "avoided")
-#                 continue_loop = True
-#         if continue_loop:
-#             continue
-#         G_CH0 = get_data_corrected_carbon(
-#             corrected_carbon_sheet_thermal_corrections, C, "CH0"
-#         )
-#         G_CH1 = get_data_corrected_carbon(
-#             corrected_carbon_sheet_thermal_corrections, C, "1H"
-#         )
-#         try:  # MN3CZ_2H
-#             G_CH2 = get_data_corrected_carbon(
-#                 corrected_carbon_sheet_thermal_corrections, C, "2H"
-#             )
-#         except:
-#             G_CH2 = 9999
-#         try:  # MN6C-2+1N-2_3H not present
-#             G_CH3 = get_data_corrected_carbon(
-#                 corrected_carbon_sheet_thermal_corrections, C, "3H"
-#             )
-#         except:
-#             G_CH3 = 9999
-#         try:
-#             G_CH4 = get_data_corrected_carbon(
-#                 corrected_carbon_sheet_thermal_corrections, C, "4H"
-#             )
-#         except:  # not possible to get CH4
-#             G_CH4 = 9999
-#         thermal_OOH = get_data_thermal_corrections(
-#             thermal_corrections, C, metal, "non", "OOH"
-#         )
-#         thermal_H = 9999
-#         gr_orr = []
-#         gr_orr_name = []
-#         try:
-#             E_MN4 = db.get(metal=metal, ads1="non", ads2="non").energy
-#         except:
-#             print(f"carbon:{C} metal:{metal} not present")
-#             continue
-
-#         # *OH
-#         E_MN4_OH = 9999
-
-#         # *OOH
-
-#         E_MN4_OOH = db.get(metal=metal, ads1="non", ads2="OOH").energy
-
-#         # *O
-#         E_MN4_O = 9999
-
-#         G_MN4 = E_MN4
-#         # G_MN4_H2O = E_MN4_H2O + thermal_H2O
-#         G_MN4_H2O = 9999
-#         G_MN4_OH = 9999
-#         G_MN4_O = 9999
-#         G_MN4_H = 9999
-#         G_MN4_OOH = E_MN4_OOH + thermal_OOH + 0.2
-
-#         temp1, temp1_border, B_rel, H2O_rel, OH_rel, O_rel, H_rel, OOH_rel = (
-#             relative_stability_H2O(
-#                 pH_orr,
-#                 u_orr,
-#                 m,
-#                 G_MN4,
-#                 G_MN4_O,
-#                 G_MN4_OH,
-#                 G_CH0,
-#                 G_CH1,
-#                 G_CH2,
-#                 G_CH3,
-#                 G_CH4,
-#                 G_MN4_H2O,
-#                 G_MN4_H,
-#                 G_MN4_OOH,
-#             )
-#         )
-#         if electrolyte == "Bare":
-#             electro = B_rel
-#         elif electrolyte == "OOH":
-#             electro = OOH_rel
-#         gr_orr.append(electro)
-#         gr_orr_name.append("*")
-#         vals = main_ooh(C, metal)
-#         ooh_vals.append(vals)
-#         # if vals > 3.7 and vals < 4.7:
-#         #     annote.append(ax.text(vals, gr_orr[0], f'{m}'))
-#         n_str = list(shapes_dict.keys())[idx].split("(", 1)[1].split(")")[0]
-#         numbers = re.findall(r"\d+", n_str)
-#         n = sum([int(i) for i in numbers])
-#         p1 = plt.scatter(
-#             vals,
-#             gr_orr,
-#             c=nitrogen_dict[n],
-#             marker=list(shapes_dict.values())[idx],
-#             s=75,
-#         )
-
-#     def f(c, m):
-#         return plt.plot([], [], marker=m, color=c, ls="none")[0]
-
-#     handles = []
-#     n_used = []
-#     for key, val in shapes_dict.items():
-#         n_str = key.split("(", 1)[1].split(")")[0]
-#         # print(n_str)
-#         numbers = re.findall(r"\d+", n_str)
-#         n = sum([int(i) for i in numbers])
-#         if n not in n_used:
-#             n_used.append(n)
-#         handles.append(f(nitrogen_dict[n], val))
-
-#     legend_patches = []
-
-#     for nitro in sorted(n_used):
-#         legend_patches.append(Patch(color=nitrogen_dict[nitro], label=f"N={nitro}"))
-
-#     ax.legend(handles, list(shapes_dict.keys()), bbox_to_anchor=(1.05, 1), ncol=2)
-#     first_legend = ax.legend(handles=legend_patches, bbox_to_anchor=(1.02, 0.3))
-#     fig.gca().add_artist(first_legend)
-#     # add second legend
-
-#     legend = plt.legend(
-#         handles, list(shapes_dict.keys()), bbox_to_anchor=(1.05, 1), ncol=2
-#     )
-#     # legend_patches = [Patch(color=color, label=name) for name, color in color_dict.items()]
-#     legend.set_title("# atoms (configuration)")
-#     ax.axvline(x=4.2, color="r", linestyle="--", linewidth=2)
-#     # first_legend = ax.legend(handles=legend_patches, bbox_to_anchor=(1.2, 0.6))
-#     # ax.legend(bbox_to_anchor=(1.2, 0.9))
-#     # ax.legend(loc='lower left', ncol=2, bbox_to_anchor=(1.15, 0.3))
-#     # ax.add_artist(first_legend)
-#     ax.set_ylabel("$\Delta$G$_R$ \ eV")
-#     plt.title(f"{electrolyte} surface site @{u_orr} V$_{{SHE}}$, 0 pH")
-
-#     ax.set_xlabel("$\Delta$G(OOH*) \ eV (theoretical)")
-#     plt.savefig(
-#         f"nitrogens_{metal}_zero_h_gradient_{electrolyte}_stability_plot_{u_orr}.png",
-#         bbox_inches="tight",
-#     )
-
-
-# for met in metals:
-#     main(met)
+def main(**data: dict) -> None:
+    """Calculate the relative stability of the OOH intermediate.
+    
+    Args:
+        data: Dictionary containing the data for the calculation.
+    
+    Returns:
+        None
+    """
+    database = {}
+    carbon_structure = data["carbon_structure"]
+    metal = data["metal"]
+    xch_db = connect(database_dir / "e_xch_solv_implicit.db")
+    xc_db = connect(database_dir / "e_xc_solv_implicit.db")
+    # xc_db = connect(database_dir / "e_xc_implicit_solv.db")
+    dopant = data["dopant"]
+    pristine_implicit = connect(database_dir / "pristine_implicit.db")
+    adsorption_db = connect(database_dir / "adsorption.db")
+    thermal_corrections = json.load(open(os.path.join(database_dir, 'ads_vib_corrections.json')))
+    run_struc = data["run_structure"]
+    structure = data['name']
+    name = str(Path(run_struc).stem).replace(metal, "M")
+    print(name)
+    for row in xc_db.select():
+        print(row.name)
+    e_xc = xc_db.get(name=name).energy
+    h_master = {'0H': e_xc}
+    for hs in range(1, 5):
+        find_config_min = []
+        for conf in range(1, 5):
+            for row in xch_db.select(carbon_structure=carbon_structure):
+                if str(Path(row.run_dir).stem).split('_')[0] == f'{hs}H' and str(Path(row.run_dir).stem).split('_')[1] == f'config{conf}':
+                    find_config_min.append(row.energy)
+        if find_config_min:
+            h_master[f'{hs}H'] = min(find_config_min)
+        else:
+            # initialize with a high value so if xh calculation(s) dont converge, it will be too large
+            h_master[f'{hs}H'] = 9999 
+    thermal_ooh = thermal_corrections[structure]['correction']
+    e_mn4_ooh = adsorption_db.get(name=structure, ads1="non", ads2="OOH").energy
+    print(structure, metal, carbon_structure)
+    e_mn4 = pristine_implicit.get(name=structure, metal=metal, carbon_structure=carbon_structure).energy
+    e_mn4_ooh_corr = e_mn4_ooh + thermal_ooh + 0.2 # 0.2 eV correction for the Christensen correction
+    print(e_mn4, h_master, e_mn4_ooh_corr)
+    b_rel, ooh_rel = acid_stability(ph, u, metal, e_mn4, h_master, e_mn4_ooh_corr)
+    database_data = {
+        "b_rel": b_rel,
+        "ooh_rel": ooh_rel,
+        "carbon_structure": carbon_structure,
+        "metal": metal,
+        "dopant": dopant,
+        "run_structure": data["run_structure"],
+        "base_dir": str(data["base_dir"]),
+    }
+    database[structure] = database_data
+    add_entry(os.path.join(database_dir, "operating_stability.json"), database)
+    cutoff = 1.5
+    if b_rel < cutoff:
+        add_entry(os.path.join(database_dir, "seperated_operating_stability.json"), database)
+        return True, data
+    else:
+        run_logger(f"DISCARD - {structure}/{carbon_structure}/{dopant}/{metal} - Operating stability b_rel; {b_rel} < {cutoff} eV. Ref: ooh_rel; {ooh_rel}", str(__file__), 'error')
+        return False, None

@@ -18,7 +18,7 @@ def e_c(data: dict, vasp_parameters: dict) -> bool:
         vasp_parameters (dict): Dictionary containing the VASP parameters.
 
     Returns:
-        converged (bool): True if all the SCF calculations have converged, False otherwise.
+        True if all the SCF calculations have converged, False otherwise.
     """
     carbon_structure = Path(data["carbon_structure"])
     base_dir = Path(data["base_dir"])
@@ -34,6 +34,10 @@ def e_c(data: dict, vasp_parameters: dict) -> bool:
     structure = read(os.path.join(struct_dir, "init.POSCAR"))
     cwd = os.getcwd()
     structure.write(e_c_dir / "init.POSCAR")
+    if os.path.exists(e_c_dir / "OUTCAR.opt"):
+        outcar = Path(e_c_dir) / "OUTCAR.opt"
+        data["name"] = data["carbon_structure"]
+        return True
     converged = synthesis_stability_run_vasp(e_c_dir, vasp_parameters, "e_c")
     if converged:
         outcar = Path(e_c_dir) / "OUTCAR.opt"
@@ -42,10 +46,10 @@ def e_c(data: dict, vasp_parameters: dict) -> bool:
         os.chdir(cwd)
         return True
     else:
-        print("e_c calculation did not converge.")
-        run_logger("e_c calculation did not converge.", str(__file__), "error")
+        print(f"e_c calculation did not converge for {carbon_structure}.")
+        run_logger(f"e_c calculation did not converge for {carbon_structure}.", str(__file__), "error")
         os.chdir(cwd)
-        return False
+        raise ValueError(f"e_c calculation did not converge for {carbon_structure}.")
 
 
 def main(**data: dict) -> tuple[bool, None]:

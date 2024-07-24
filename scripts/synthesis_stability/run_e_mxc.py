@@ -3,6 +3,7 @@ from pathlib import Path
 
 from ase.db import connect  # type: ignore
 from ase.io import read  # type: ignore
+from typing import Optional
 from perqueue.constants import INDEX_KW  # type: ignore
 from utils import (  # type: ignore
     read_and_write_database,
@@ -20,7 +21,7 @@ def e_mxc(data: dict, vasp_parameters: dict) -> bool:
         vasp_parameters (dict): Dictionary containing the VASP parameters.
 
     Returns:
-        converged (bool): True if all the SCF calculations have converged, False otherwise.
+       True if all the SCF calculations have converged, False otherwise.
     """
     struc_path = Path(data["run_structure"])
     base_dir = Path(data["base_dir"])
@@ -34,11 +35,17 @@ def e_mxc(data: dict, vasp_parameters: dict) -> bool:
             base_dir, "runs", "synthesis_stability", "e_mxc", f"{structure_name}"
         )
     )
+    if os.path.exists(e_mxc_dir):
+        outcar = Path(e_mxc_dir) / "OUTCAR.opt"
+        data["name"] = str(Path(data["run_structure"]).stem)
+        return True
     e_mxc_dir.mkdir(parents=True, exist_ok=True)
     if dopant != "":
-        for atoms in structure:
-            if atoms.symbol == "B":
-                atoms.symbol = dopant
+        if dopant != 'O':
+            if dopant != 'SB':
+                for atoms in structure:
+                    if atoms.symbol == "B":
+                        atoms.symbol = dopant
     structure.write(e_mxc_dir / "init.POSCAR")
     cwd = os.getcwd()
     converged = synthesis_stability_run_vasp(e_mxc_dir, vasp_parameters, "e_mxc")
@@ -49,13 +56,13 @@ def e_mxc(data: dict, vasp_parameters: dict) -> bool:
         os.chdir(cwd)
         return True
     else:
-        run_logger("e_mxc calculation did not converge.", str(__file__), "error")
-        print("e_mxc calculation did not converge.")
+        run_logger(f"e_mxc calculation did not converge for {structure}.", str(__file__), "error")
+        print(f"e_mxc calculation did not converge for {structure}.")
         os.chdir(cwd)
-        return False
+        raise ValueError(f"e_mxc calculation did not converge for {structure}.")
 
 
-def main(**data: dict) -> tuple[bool, dict] | tuple[bool, None]:
+def main(**data: dict) -> tuple[bool, Optional[dict]]:
     """Run the synthesis stability part of the workflow.
     g_a = e_xc + e_m_on_c - e_c - e_mxc
     g_d = e_m + e_xc - e_mxc
@@ -70,7 +77,7 @@ def main(**data: dict) -> tuple[bool, dict] | tuple[bool, None]:
     idx, *_ = data[INDEX_KW]
     idx = str(idx)
     data_base_folder = Path(data[idx]["base_dir"]) / "runs" / "databases"
-    e_xc_db = connect(os.path.join(data_base_folder, "e_xc.db"))
+    e_xc_db = connect(os.path.join(data_base_folder, "e_xc_solv_implicit.db"))
     name = str(Path(data[idx]["run_structure"]).stem).replace(data[idx]["metal"], "M")
     try:
         # Check if e_xc is present in the database, if not catalyst is discarded
