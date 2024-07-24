@@ -40,7 +40,11 @@ def e_m_on_c(data: dict, vasp_parameters: dict) -> bool:
     if os.path.exists(e_m_on_c_dir / "OUTCAR.opt"):
         outcar = Path(e_m_on_c_dir) / "OUTCAR.opt"
         skimmed_data["name"] = f"{carbon_structure}_0N_0H"
-        run_logger(f"e_m_on_c calculation already exists for {metal} on {carbon_structure}.", str(__file__), "info")
+        run_logger(
+            f"e_m_on_c calculation already exists for {metal} on {carbon_structure}.",
+            str(__file__),
+            "info",
+        )
         print(f"e_m_on_c calculation already exists for {metal} on {carbon_structure}.")
         return True
     e_m_on_c_dir.mkdir(parents=True, exist_ok=True)
@@ -63,10 +67,18 @@ def e_m_on_c(data: dict, vasp_parameters: dict) -> bool:
         os.chdir(cwd)
         return True
     else:
-        run_logger(f"e_m_on_c calculation did not converge for {metal} on {carbon_structure}.", str(__file__), "error")
-        print(f"e_m_on_c calculation did not converge for {metal} on {carbon_structure}.")
+        run_logger(
+            f"e_m_on_c calculation did not converge for {metal} on {carbon_structure}.",
+            str(__file__),
+            "error",
+        )
+        print(
+            f"e_m_on_c calculation did not converge for {metal} on {carbon_structure}."
+        )
         os.chdir(cwd)
-        raise ValueError(f"e_m_on_c calculation did not converge for {metal} on {carbon_structure}.")
+        raise ValueError(
+            f"e_m_on_c calculation did not converge for {metal} on {carbon_structure}."
+        )
 
 
 def main(**data: dict) -> tuple[bool, dict]:
@@ -90,7 +102,7 @@ def main(**data: dict) -> tuple[bool, dict]:
     del data["metals"]
     converged = e_m_on_c(data, vasp_parameters)
     workflow_data = gather_structs(data, metals)
-    return True, workflow_data
+    return converged, workflow_data
 
 
 if __name__ == "__main__":

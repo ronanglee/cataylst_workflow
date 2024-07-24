@@ -9,10 +9,10 @@ from ase.vibrations import Vibrations  # type: ignore
 from utils import (  # type: ignore
     add_entry,
     check_electronic,
-    get_vibrational_correction,
-    run_logger,
     check_ion,
-    magmons
+    get_vibrational_correction,
+    magmons,
+    run_logger,
 )
 from vasp_input import vasp_input  # type: ignore
 
@@ -114,7 +114,7 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
     params["lcharg"] = True
     params["lwave"] = False
     params["isif"] = 0
-    params['ediff'] = 1e-06
+    params["ediff"] = 1e-06
     calc1 = calc
     paramscopy = params.copy()
     calc1 = Vasp(**paramscopy)
@@ -265,7 +265,9 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
                 ]:
                     os.system("cp %s %s.%s" % (f, f, ext))
                 vibindices = adsorbate_id
-                vib = Vibrations(atoms, indices=vibindices, name="vib", delta=0.01, nfree=2)
+                vib = Vibrations(
+                    atoms, indices=vibindices, name="vib", delta=0.01, nfree=2
+                )
                 vib.run()
                 vib.get_energies()
                 vib.summary(log="vibration.txt")
@@ -291,12 +293,14 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
     if converged:
         return True
     else:
-        run_logger(f"Vibration calculation did not converge in {cwd}.", str(__file__), "error")
+        run_logger(
+            f"Vibration calculation did not converge in {cwd}.", str(__file__), "error"
+        )
         print(f"Vibration calculation did not converge in {cwd}.")
         raise ValueError(f"Vibration calculation did not converge in {cwd}.")
- 
 
-def main(**data: dict) -> tuple[bool, None]:
+
+def main(**data: dict) -> tuple[bool, dict]:
     """Run the vibration part of the workflow.
 
     Args:

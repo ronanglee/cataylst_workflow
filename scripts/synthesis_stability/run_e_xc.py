@@ -2,7 +2,6 @@ import os
 from pathlib import Path
 
 from ase.io import read  # type: ignore
-from perqueue.constants import INDEX_KW  # type: ignore
 from utils import (  # type: ignore
     read_and_write_database,
     run_logger,
@@ -30,8 +29,8 @@ def e_xc(data: dict, vasp_parameters: dict) -> bool:
     run_dir.mkdir(exist_ok=True, parents=True)
     structure = read(os.path.join(struc_path, "init.POSCAR"))
     if dopant != "":
-        if dopant != 'O':
-            if dopant != 'SB':
+        if dopant != "O":
+            if dopant != "SB":
                 for atom in structure:
                     if atom.symbol == "B":
                         atom.symbol = dopant
@@ -53,6 +52,7 @@ def e_xc(data: dict, vasp_parameters: dict) -> bool:
         run_logger("e_xc calculation did not converge.", str(__file__), "error")
         print("e_xc calculation did not converge.")
         raise ValueError("e_xc calculation did not converge.")
+
 
 def main(**data: dict) -> tuple[bool, None]:
     """Run the synthesis stability part of the workflow.

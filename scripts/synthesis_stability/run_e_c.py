@@ -47,7 +47,11 @@ def e_c(data: dict, vasp_parameters: dict) -> bool:
         return True
     else:
         print(f"e_c calculation did not converge for {carbon_structure}.")
-        run_logger(f"e_c calculation did not converge for {carbon_structure}.", str(__file__), "error")
+        run_logger(
+            f"e_c calculation did not converge for {carbon_structure}.",
+            str(__file__),
+            "error",
+        )
         os.chdir(cwd)
         raise ValueError(f"e_c calculation did not converge for {carbon_structure}.")
 

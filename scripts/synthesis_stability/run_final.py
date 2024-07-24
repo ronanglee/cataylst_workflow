@@ -10,9 +10,9 @@ def main(**data: dict) -> tuple[bool, dict | None]:
     """Read all the individual terms and calculate the operating stability of the catalyst.
     g_a = e_xc + e_m_on_c - e_c - e_mxc
     g_d = e_m + e_xc - e_mxc
-    hof = e_mxc - e_m - e_xc 
+    hof = e_mxc - e_m - e_xc
     where x is the dopant, c is carbon and m is the metal.
-    
+
     g_a - approximated intermediate structure energy
     g_d - approximated final structure energy
     hof - heat of formation
@@ -65,14 +65,26 @@ def main(**data: dict) -> tuple[bool, dict | None]:
     del data["pq_index"]
 
     if hof > 0:
-        run_logger(f"DISCARD - {structure}/{carbon_structure}/{dopant}/{metal} - Heat of formation; {hof} < 0 eV", str(__file__), 'error')
+        run_logger(
+            f"DISCARD - {structure}/{carbon_structure}/{dopant}/{metal} - Heat of formation; {hof} < 0 eV",
+            str(__file__),
+            "error",
+        )
         return False, None
     if g_a > 0:
-        add_entry(os.path.join(data_base_folder, "seperated_synthesis_stability.json"), database)
+        add_entry(
+            os.path.join(data_base_folder, "seperated_synthesis_stability.json"),
+            database,
+        )
         return True, data
     else:
-        run_logger(f"DISCARD - {structure}/{carbon_structure}/{dopant}/{metal} - Synthesis stability g_a; {g_a} > 0 eV.", str(__file__), 'error')
+        run_logger(
+            f"DISCARD - {structure}/{carbon_structure}/{dopant}/{metal} - Synthesis stability g_a; {g_a} > 0 eV.",
+            str(__file__),
+            "error",
+        )
         return False, None
+
 
 if __name__ == "__main__":
     main()

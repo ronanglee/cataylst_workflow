@@ -2,11 +2,10 @@ import os
 from pathlib import Path
 
 from ase.io import read  # type: ignore
-from perqueue.constants import INDEX_KW  # type: ignore
 from utils import (  # type: ignore
+    operating_stability_run_vasp,
     read_and_write_database,
     run_logger,
-    operating_stability_run_vasp,
 )
 from vasp_input import vasp_input  # type: ignore
 
@@ -26,12 +25,14 @@ def e_xc(data: dict, vasp_parameters: dict) -> bool:
     metal = data["metal"]
     dopant = data["dopant"]
     del data["metal"]
-    run_dir = Path(os.path.join(base_dir, "runs", "operating_stability", "e_xc_solv_implicit"))
+    run_dir = Path(
+        os.path.join(base_dir, "runs", "operating_stability", "e_xc_solv_implicit")
+    )
     run_dir.mkdir(exist_ok=True, parents=True)
     structure = read(os.path.join(struc_path, "init.POSCAR"))
     if dopant != "":
-        if dopant != 'O':
-            if dopant != 'SB':
+        if dopant != "O":
+            if dopant != "SB":
                 for atom in structure:
                     if atom.symbol == "B":
                         atom.symbol = dopant
@@ -43,20 +44,27 @@ def e_xc(data: dict, vasp_parameters: dict) -> bool:
         outcar = Path(remove_metal_dir) / "OUTCAR.RDip"
         data["name"] = str(Path(data["run_structure"]).stem).replace(metal, "M")
         return True
-    converged = operating_stability_run_vasp(remove_metal_dir, vasp_parameters, "e_xc_solv_implicit",)
+    converged = operating_stability_run_vasp(
+        remove_metal_dir,
+        vasp_parameters,
+        "e_xc_solv_implicit",
+    )
     if converged:
         outcar = Path(remove_metal_dir) / "OUTCAR.RDip"
         data["name"] = str(Path(data["run_structure"]).stem).replace(metal, "M")
         read_and_write_database(outcar, "e_xc_solv_implicit", data)
         return True
     else:
-        run_logger("e_xc_solv_implicit calculation did not converge.", str(__file__), "error")
+        run_logger(
+            "e_xc_solv_implicit calculation did not converge.", str(__file__), "error"
+        )
         print("e_xc_solv_implicit calculation did not converge.")
         raise ValueError("e_xc_implicit_solv calculation did not converge.")
 
+
 def main(**data: dict) -> tuple[bool, None]:
     """Run the operating stability part of the workflow.
-    
+
     Args:
         data (dict): Dictionary containing run parameters.
     Returns:

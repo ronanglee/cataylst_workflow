@@ -2,16 +2,16 @@
 
 import os
 from pathlib import Path
+from typing import Optional  # type: ignore
 
 from ase.calculators.vasp import Vasp  # type: ignore
-from typing import Optional # type: ignore
 from ase.io import read  # type: ignore
 from utils import (  # type: ignore
     check_electronic,
     check_ion,
+    magmons,
     read_and_write_database,
     run_logger,
-    magmons
 )
 from vasp_input import vasp_input  # type: ignore
 
@@ -280,9 +280,7 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
                         outcar = Path(cwd) / "OUTCAR.RDip"
                         data["name"] = str(Path(data["run_structure"]).stem)
                         if "implicit" in str(cwd):
-                            read_and_write_database(
-                                outcar, "pristine_implicit", data
-                            )
+                            read_and_write_database(outcar, "pristine_implicit", data)
                         elif "vac" in str(cwd):
                             read_and_write_database(outcar, "pristine_vac", data)
             # clean up
@@ -302,7 +300,9 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
         return True
     else:
         run_logger(
-            f"Adsorbate relaxation calculation did not converge in {cwd}.", str(__file__), "error"
+            f"Adsorbate relaxation calculation did not converge in {cwd}.",
+            str(__file__),
+            "error",
         )
         print(f"Adsorbate relaxation calculation is not done in {cwd}")
         raise ValueError(f"Adsorbate relaxation calculation is not done in {cwd}")

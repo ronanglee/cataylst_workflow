@@ -1,9 +1,9 @@
 import os
 from pathlib import Path
+from typing import Optional
 
 from ase.db import connect  # type: ignore
 from ase.io import read  # type: ignore
-from typing import Optional
 from perqueue.constants import INDEX_KW  # type: ignore
 from utils import (  # type: ignore
     read_and_write_database,
@@ -41,8 +41,8 @@ def e_mxc(data: dict, vasp_parameters: dict) -> bool:
         return True
     e_mxc_dir.mkdir(parents=True, exist_ok=True)
     if dopant != "":
-        if dopant != 'O':
-            if dopant != 'SB':
+        if dopant != "O":
+            if dopant != "SB":
                 for atoms in structure:
                     if atoms.symbol == "B":
                         atoms.symbol = dopant
@@ -56,7 +56,11 @@ def e_mxc(data: dict, vasp_parameters: dict) -> bool:
         os.chdir(cwd)
         return True
     else:
-        run_logger(f"e_mxc calculation did not converge for {structure}.", str(__file__), "error")
+        run_logger(
+            f"e_mxc calculation did not converge for {structure}.",
+            str(__file__),
+            "error",
+        )
         print(f"e_mxc calculation did not converge for {structure}.")
         os.chdir(cwd)
         raise ValueError(f"e_mxc calculation did not converge for {structure}.")

@@ -1,24 +1,21 @@
 import os
-from itertools import combinations
 from pathlib import Path
 
-import numpy as np  # type: ignore
-from ase.build import add_adsorbate  # type: ignore
-from ase.io import read, write  # type: ignore
 from perqueue.constants import INDEX_KW  # type: ignore
 from utils import (  # type: ignore
+    operating_stability_run_vasp,
     read_and_write_database,
     run_logger,
-    operating_stability_run_vasp,
 )
 from vasp_input import vasp_input  # type: ignore
-                        
+
+
 def e_xch(data: dict, vasp_parameters: dict) -> bool:
     """Generate and run the input files for the e_xch calculations with solvent and dipole corrections.
-    
+
     Args:
         data (dict): Dictionary containing the run parameters.
-        
+
     Returns:
         True if the calculation converged, False otherwise.
     """
@@ -29,7 +26,9 @@ def e_xch(data: dict, vasp_parameters: dict) -> bool:
         outcar = Path(run_dir) / "OUTCAR.RDip"
         return True
     converged = operating_stability_run_vasp(
-        run_dir, vasp_parameters, "e_xch_solv_implicit",
+        run_dir,
+        vasp_parameters,
+        "e_xch_solv_implicit",
     )
     if converged:
         outcar = Path(run_dir) / "OUTCAR.RDip"
@@ -41,8 +40,12 @@ def e_xch(data: dict, vasp_parameters: dict) -> bool:
             str(__file__),
             "error",
         )
-        print(f"e_xch_solv_implicit calculation did not converge for {config} in {structure}.")
-        raise ValueError(f"e_xch_solv_implicit calculation did not converge for {config} in {structure}.")
+        print(
+            f"e_xch_solv_implicit calculation did not converge for {config} in {structure}."
+        )
+        raise ValueError(
+            f"e_xch_solv_implicit calculation did not converge for {config} in {structure}."
+        )
 
 
 def main(**data: dict) -> tuple[bool, None]:
@@ -60,6 +63,7 @@ def main(**data: dict) -> tuple[bool, None]:
     converged = e_xch(data[idx], vasp_parameters)
     os.chdir(cwd)
     return converged, None
+
 
 if __name__ == "__main__":
     main()

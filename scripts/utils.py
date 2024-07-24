@@ -6,7 +6,7 @@ from itertools import combinations
 from pathlib import Path
 
 import numpy as np  # type: ignore
-from ase.build import add_adsorbate # type: ignore
+from ase.build import add_adsorbate  # type: ignore
 from ase.calculators.vasp import Vasp  # type: ignore
 from ase.db import connect  # type: ignore
 from ase.io import read, write  # type: ignore
@@ -36,12 +36,12 @@ def check_electronic(set_nelm: int) -> int:
 
 def check_ion(set_nsw: int) -> int:
     """Open OUTCAR and check NSW
-ad
-    Args:
-       set_nsw (int): NSW in INCAR
+    ad
+        Args:
+           set_nsw (int): NSW in INCAR
 
-    Returns:
-        1 if calculation didn't stop because reached the max number of ionic steps, 0 otherwise.
+        Returns:
+            1 if calculation didn't stop because reached the max number of ionic steps, 0 otherwise.
     """
     regexp = re.compile("Iteration\s+(?P<nsw>\d*)\(\s+(?P<nelm>\d*)\)")  # noqa
     max_nsw = 0
@@ -57,7 +57,8 @@ ad
 
 
 def synthesis_stability_run_vasp(
-    directory: os.PathLike, vasp_parameters: dict, calculation: str) -> bool:
+    directory: os.PathLike, vasp_parameters: dict, calculation: str
+) -> bool:
     """Run the VASP calculations with NO solvation and dipole coorections.
 
     Args:
@@ -167,9 +168,14 @@ def synthesis_stability_run_vasp(
     else:
         print(f"{calculation} calculation did not converge.")
         return False
-    
+
+
 def operating_stability_run_vasp(
-    directory: os.PathLike, vasp_parameters: dict, calculation: str, solvation: bool | None = False) -> bool:
+    directory: os.PathLike,
+    vasp_parameters: dict,
+    calculation: str,
+    solvation: bool | None = False,
+) -> bool:
     """Run the VASP calculations.
 
     Args:
@@ -365,9 +371,11 @@ def gather_structs(data: dict, metals: list) -> dict:
     idx = 0
     for struc_path in wanted_structures:
         structure = read(Path(struc_path) / Path("init.POSCAR"))
-        
-        
-        if 'S' in structure.get_chemical_symbols() and 'B' in structure.get_chemical_symbols():
+
+        if (
+            "S" in structure.get_chemical_symbols()
+            and "B" in structure.get_chemical_symbols()
+        ):
             workflow_data[idx] = {
                 "base_dir": data["base_dir"],
                 "run_structure": str(struc_path).replace("Pt", metal),
@@ -376,7 +384,7 @@ def gather_structs(data: dict, metals: list) -> dict:
                 "dopant": "SB",
             }
             idx += 1
-        elif 'O' in structure.get_chemical_symbols():
+        elif "O" in structure.get_chemical_symbols():
             workflow_data[idx] = {
                 "base_dir": data["base_dir"],
                 "run_structure": str(struc_path).replace("Pt", metal),
@@ -388,9 +396,9 @@ def gather_structs(data: dict, metals: list) -> dict:
         elif dopants and "B" in structure.get_chemical_symbols():
             new_dopants = []
             for dopant in dopants:
-                if dopant != 'O':
-                    if dopant != 'SB':
-                        new_dopants.append(dopant)       
+                if dopant != "O":
+                    if dopant != "SB":
+                        new_dopants.append(dopant)
             for dopant in new_dopants:
                 data = {
                     "base_dir": data["base_dir"],
@@ -501,7 +509,7 @@ def read_and_write_database(outcar: os.PathLike, database: str, data: dict) -> N
     """
     data_base_folder = Path(data["base_dir"]) / "runs" / "databases"
     db = connect(data_base_folder / f"{database}.db")
-    structure = read(f'{outcar}@-1')
+    structure = read(f"{outcar}@-1")
     db.write(structure, key_value_pairs={**data})
 
 
@@ -532,14 +540,15 @@ def run_logger(msg: str, filename: str, type_msg: str) -> None:
     else:
         logger.info(msg)
 
-def get_xch_structs(data: list) -> None:
+
+def get_xch_structs(data: dict) -> dict:
     """Get xch structures for running calculation.
 
     Args:
         data (dict): A dictionary containing the run parameters.
 
     Returns:
-        None.
+        new_data (dict): A dictionary containing the new run parameters.
     """
     new_data = {}
     overall_idx = 0
@@ -563,7 +572,7 @@ def get_xch_structs(data: list) -> None:
     no_metal = structure.copy()
     del no_metal[[atom.index for atom in structure if atom.symbol == metal]]
     # for h in range(1, len(indices) + 1):
-    for h in range(1, 4): # doing only 3 Hs as 4 very unlikey to adsorb
+    for h in range(1, 4):  # doing only 3 Hs as 4 very unlikey to adsorb
         no_metal_copy = no_metal.copy()
         idicess = []
         for atom in no_metal:
@@ -575,7 +584,7 @@ def get_xch_structs(data: list) -> None:
                     combos = []
                     for p in perm:
                         # if idxx < 5 - h:
-                        if idxx <  1:
+                        if idxx < 1:
                             combos.append(p)
                         idxx += 1
                     for idx, combo in enumerate(combos):
@@ -605,27 +614,28 @@ def get_xch_structs(data: list) -> None:
                         overall_idx += 1
     return new_data
 
-def magmons():
-    """All ferromagnetic or anti-ferromagnetic elements 
+
+def magmons() -> dict:
+    """All ferromagnetic or anti-ferromagnetic elements
     and their magnetic moments multiplied
     by 1.2 already for VASP calculations.
     """
     elements = {
-        "Co": 1.2, # multiplied by 1.2
-        "Ti": 1.8, # multiplied by 1.2
-        "Ni": 1.8, # multiplied by 1.2
-        "Mn": 6.0, # multiplied by 1.2 ( Mn2+ ? can be paramgentic or anti-ferromagnetic)
-        "Fe": 3.6, # multiplied by 1.2
-        "V": 3.8, # multiplied by 1.2
-        "Zr": 1.8, # multiplied by 1.2
-        "Nb": 3.2, # multiplied by 1.2
-        "Mo": 4.6, # multiplied by 1.2
-        "Ta": 3.4, # multiplied by 1.2
-        "W": 6.2, # multiplied by 1.2
-        "Sc": 2.8, # multiplied by 1.2
+        "Co": 1.2,  # multiplied by 1.2
+        "Ti": 1.8,  # multiplied by 1.2
+        "Ni": 1.8,  # multiplied by 1.2
+        "Mn": 6.0,  # multiplied by 1.2 ( Mn2+ ? can be paramgentic or anti-ferromagnetic)
+        "Fe": 3.6,  # multiplied by 1.2
+        "V": 3.8,  # multiplied by 1.2
+        "Zr": 1.8,  # multiplied by 1.2
+        "Nb": 3.2,  # multiplied by 1.2
+        "Mo": 4.6,  # multiplied by 1.2
+        "Ta": 3.4,  # multiplied by 1.2
+        "W": 6.2,  # multiplied by 1.2
+        "Sc": 2.8,  # multiplied by 1.2
         "Pt": 0.5,  # NOT multiplied by 1.2 as paramagnetic
-        "Pd": 0.5, # NOT multiplied by 1.2 as paramagnetic
-        "Cr": 3.9  # multiplied by 1.2
-        }
+        "Pd": 0.5,  # NOT multiplied by 1.2 as paramagnetic
+        "Cr": 3.9,  # multiplied by 1.2
+    }
 
     return elements

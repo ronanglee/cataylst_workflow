@@ -1,18 +1,18 @@
 import math
 import os
 from pathlib import Path
+from typing import Optional  # type: ignore
 
 from ase.build import add_adsorbate  # type: ignore
-from typing import Optional # type: ignore
 from ase.calculators.vasp import Vasp  # type: ignore
 from ase.db import connect  # type: ignore
 from ase.io import read, write  # type: ignore
 from utils import (  # type: ignore
     check_electronic,
     check_ion,
+    magmons,
     read_and_write_database,
     run_logger,
-    magmons
 )
 from vasp_input import vasp_input  # type: ignore
 
@@ -535,7 +535,9 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
         return True
     else:
         run_logger(
-            f"Adsorbate relaxation calculation is not converged in {cwd}.", str(__file__), "error"
+            f"Adsorbate relaxation calculation is not converged in {cwd}.",
+            str(__file__),
+            "error",
         )
         print(f"Adsorbate relaxation calculation is not converged in {cwd}.")
         raise ValueError(f"Adsorbate relaxation calculation is not converged in {cwd}.")
@@ -554,7 +556,7 @@ def main(**data: dict) -> tuple[bool, Optional[dict]]:
     ooh_dir = Path(str(data["adsorbate"])) / "implicit" / "vasp_rx"
     os.chdir(ooh_dir)
     place_adsorbate(ooh_dir, data)
-    if os.path.exists('OUTCAR.RDip'):
+    if os.path.exists("OUTCAR.RDip"):
         control = True
     else:
         control = relax_adsorbate(ooh_dir, data)
