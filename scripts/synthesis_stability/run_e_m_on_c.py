@@ -7,6 +7,7 @@ from utils import (  # type: ignore
     read_and_write_database,
     run_logger,
     synthesis_stability_run_vasp,
+    check_database
 )
 from vasp_input import vasp_input  # type: ignore
 
@@ -37,11 +38,14 @@ def e_m_on_c(data: dict, vasp_parameters: dict) -> bool:
             f"{metal}",
         )
     )
+    skimmed_data["name"] = f"{metal}{carbon_structure}_0N_0H"
     if os.path.exists(e_m_on_c_dir / "OUTCAR.opt"):
         outcar = Path(e_m_on_c_dir) / "OUTCAR.opt"
-        skimmed_data["name"] = f"{carbon_structure}_0N_0H"
         run_logger(f"e_m_on_c calculation already exists for {metal} on {carbon_structure}.", str(__file__), "info")
         print(f"e_m_on_c calculation already exists for {metal} on {carbon_structure}.")
+        return True
+    if check_database("e_m_on_c", skimmed_data):
+        print('In master database already')        
         return True
     e_m_on_c_dir.mkdir(parents=True, exist_ok=True)
     struct_dir = Path(
@@ -58,7 +62,7 @@ def e_m_on_c(data: dict, vasp_parameters: dict) -> bool:
     converged = synthesis_stability_run_vasp(e_m_on_c_dir, vasp_parameters, "e_m_on_c")
     if converged:
         outcar = Path(e_m_on_c_dir) / "OUTCAR.opt"
-        skimmed_data["name"] = f"{carbon_structure}_0N_0H"
+        skimmed_data["name"] = f"{metal}_{carbon_structure}_0N_0H"
         read_and_write_database(outcar, "e_m_on_c", skimmed_data)
         os.chdir(cwd)
         return True
@@ -90,7 +94,7 @@ def main(**data: dict) -> tuple[bool, dict]:
     del data["metals"]
     converged = e_m_on_c(data, vasp_parameters)
     workflow_data = gather_structs(data, metals)
-    return True, workflow_data
+    return converged, workflow_data
 
 
 if __name__ == "__main__":

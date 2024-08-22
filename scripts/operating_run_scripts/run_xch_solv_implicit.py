@@ -1,15 +1,13 @@
 import os
-from itertools import combinations
 from pathlib import Path
 
-import numpy as np  # type: ignore
-from ase.build import add_adsorbate  # type: ignore
-from ase.io import read, write  # type: ignore
 from perqueue.constants import INDEX_KW  # type: ignore
 from utils import (  # type: ignore
     read_and_write_database,
     run_logger,
     operating_stability_run_vasp,
+    check_database,
+    check_for_duplicates_sql
 )
 from vasp_input import vasp_input  # type: ignore
                         
@@ -25,16 +23,22 @@ def e_xch(data: dict, vasp_parameters: dict) -> bool:
     run_dir = Path(data["run_dir"])
     config = Path(data["run_dir"]).stem
     structure = Path(data["run_dir"]).parent.stem
-    if os.path.exists(run_dir / "OUTCAR.RDip"):
-        outcar = Path(run_dir) / "OUTCAR.RDip"
-        return True
+    data["name"] = f'{structure}-{config}'
+    # if os.path.exists(run_dir / "vibration.txt"):
+    #     return True
+    # print('entering e_xch')
+    master_database_dir = '/home/energy/rogle/asm_orr_rxn/master_databases'
+    if check_database("e_xch_solv_implicit_without_corrections", data):
+        print('In master e_xch_solv_implicit_without_corrections database already')
+        if check_for_duplicates_sql(f"{master_database_dir}/e_xch_vib_solv_implicit_corrections_master", data):
+            print('In master e_xch_vib_solv_implicit_corrections database already')
+            return True
     converged = operating_stability_run_vasp(
-        run_dir, vasp_parameters, "e_xch_solv_implicit",
+        run_dir, vasp_parameters, "e_xch_solv_implicit", data
     )
     if converged:
         outcar = Path(run_dir) / "OUTCAR.RDip"
-        read_and_write_database(outcar, "e_xch_solv_implicit", data)
-        return True
+        read_and_write_database(outcar, "e_xch_solv_implicit_without_corrections", data)
     else:
         run_logger(
             f"e_xch_solv_implicit calculation did not converge for {config} in {structure}.",

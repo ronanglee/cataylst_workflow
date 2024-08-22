@@ -7,6 +7,7 @@ from utils import (  # type: ignore
     read_and_write_database,
     run_logger,
     synthesis_stability_run_vasp,
+    check_database
 )
 from vasp_input import vasp_input  # type: ignore
 
@@ -24,29 +25,23 @@ def e_xc(data: dict, vasp_parameters: dict) -> bool:
     struc_path = Path(data["run_structure"])
     base_dir = Path(data["base_dir"])
     metal = data["metal"]
-    dopant = data["dopant"]
     del data["metal"]
     run_dir = Path(os.path.join(base_dir, "runs", "synthesis_stability", "e_xc"))
     run_dir.mkdir(exist_ok=True, parents=True)
     structure = read(os.path.join(struc_path, "init.POSCAR"))
-    if dopant != "":
-        if dopant != 'O':
-            if dopant != 'SB':
-                for atom in structure:
-                    if atom.symbol == "B":
-                        atom.symbol = dopant
     del structure[[atom.symbol == metal for atom in structure]]
     remove_metal_dir = run_dir / Path(str(struc_path.stem).replace(metal, "M"))
     remove_metal_dir.mkdir(exist_ok=True, parents=True)
     structure.write(remove_metal_dir / "init.POSCAR")
+    data["name"] = str(Path(data["run_structure"]).stem).replace(metal, "M")
     if os.path.exists(remove_metal_dir / "OUTCAR.opt"):
-        outcar = Path(remove_metal_dir) / "OUTCAR.opt"
-        data["name"] = str(Path(data["run_structure"]).stem).replace(metal, "M")
+        return True
+    if check_database("e_xc", data):
+        print('In master database already')
         return True
     converged = synthesis_stability_run_vasp(remove_metal_dir, vasp_parameters, "e_xc")
     if converged:
         outcar = Path(remove_metal_dir) / "OUTCAR.opt"
-        data["name"] = str(Path(data["run_structure"]).stem).replace(metal, "M")
         read_and_write_database(outcar, "e_xc", data)
         return True
     else:

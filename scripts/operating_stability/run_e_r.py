@@ -4,7 +4,7 @@ import json
 import os
 from ase.db import connect # type: ignore
 from pathlib import Path # type: ignore
-from utils import run_logger, add_entry # type: ignore
+from utils import run_logger, add_entry, read_and_write_database, retreive_sql_correction # type: ignore
 
 # constant
 kb = 8.617e-5  # Boltzmann constant in eV/K
@@ -253,38 +253,48 @@ def main(**data: dict) -> None:
     database = {}
     carbon_structure = data["carbon_structure"]
     metal = data["metal"]
-    xch_db = connect(database_dir / "e_xch_solv_implicit.db")
+    xch_db = connect(database_dir / "e_xch_solv_implicit_without_corrections.db")
     xc_db = connect(database_dir / "e_xc_solv_implicit.db")
-    # xc_db = connect(database_dir / "e_xc_implicit_solv.db")
     dopant = data["dopant"]
     pristine_implicit = connect(database_dir / "pristine_implicit.db")
-    adsorption_db = connect(database_dir / "adsorption.db")
-    thermal_corrections = json.load(open(os.path.join(database_dir, 'ads_vib_corrections.json')))
+    adsorption_db = connect(database_dir / "e_adsorbate_without_corrections.db")
     run_struc = data["run_structure"]
     structure = data['name']
     name = str(Path(run_struc).stem).replace(metal, "M")
-    print(name)
-    for row in xc_db.select():
-        print(row.name)
-    e_xc = xc_db.get(name=name).energy
+    try:
+        e_xc = xc_db.get(name=name).energy
+    except KeyError:
+        basee =  '/home/energy/rogle/asm_orr_rxn/catalyst_workflow/runs/operating_stability/e_xc_solv_implicit/' + name
+        outcar = Path(basee) / "OUTCAR.RDip"
+        copy_data = data.copy()
+        del copy_data["pq_index"]
+        del copy_data['metal']
+        copy_data['name'] = name
+        read_and_write_database(outcar, "e_xc_solv_implicit", copy_data)
+        e_xc = xc_db.get(name=name).energy
     h_master = {'0H': e_xc}
     for hs in range(1, 5):
         find_config_min = []
-        for conf in range(1, 5):
-            for row in xch_db.select(carbon_structure=carbon_structure):
-                if str(Path(row.run_dir).stem).split('_')[0] == f'{hs}H' and str(Path(row.run_dir).stem).split('_')[1] == f'config{conf}':
-                    find_config_min.append(row.energy)
+        # for conf in range(1, 5):
+        for row in xch_db.select(carbon_structure=carbon_structure):
+            xch_correction = retreive_sql_correction(os.path.join(database_dir, 'e_xch_vib_solv_implicit_corrections'), {'name': f'{name}_{hs}H_config1'})
+            if xch_correction is not None:
+                corrected_energy = row.energy + float(xch_correction)
+                find_config_min.append(corrected_energy)
+            else:
+                run_logger(f"Could not find {name}_{hs}H_config1 in the thermal corrections database", str(__file__), 'error')
         if find_config_min:
             h_master[f'{hs}H'] = min(find_config_min)
         else:
             # initialize with a high value so if xh calculation(s) dont converge, it will be too large
-            h_master[f'{hs}H'] = 9999 
-    thermal_ooh = thermal_corrections[structure]['correction']
+            h_master[f'{hs}H'] = 9999
+    if h_master['1H'] == 9999:
+        run_logger(f"Could not find any 1H configurations for {name}", str(__file__), 'error')
+        raise ValueError(f"Could not find any 1H configurations for {name}")
+    thermal_ooh = float(retreive_sql_correction(os.path.join(database_dir, 'e_ads_vib_corrections'), data))
     e_mn4_ooh = adsorption_db.get(name=structure, ads1="non", ads2="OOH").energy
-    print(structure, metal, carbon_structure)
     e_mn4 = pristine_implicit.get(name=structure, metal=metal, carbon_structure=carbon_structure).energy
     e_mn4_ooh_corr = e_mn4_ooh + thermal_ooh + 0.2 # 0.2 eV correction for the Christensen correction
-    print(e_mn4, h_master, e_mn4_ooh_corr)
     b_rel, ooh_rel = acid_stability(ph, u, metal, e_mn4, h_master, e_mn4_ooh_corr)
     database_data = {
         "b_rel": b_rel,
@@ -297,10 +307,11 @@ def main(**data: dict) -> None:
     }
     database[structure] = database_data
     add_entry(os.path.join(database_dir, "operating_stability.json"), database)
-    cutoff = 1.5
-    if b_rel < cutoff:
-        add_entry(os.path.join(database_dir, "seperated_operating_stability.json"), database)
-        return True, data
-    else:
-        run_logger(f"DISCARD - {structure}/{carbon_structure}/{dopant}/{metal} - Operating stability b_rel; {b_rel} < {cutoff} eV. Ref: ooh_rel; {ooh_rel}", str(__file__), 'error')
-        return False, None
+    # cutoff = 1.5
+    # if b_rel < cutoff:
+    #     add_entry(os.path.join(database_dir, "seperated_operating_stability.json"), database)
+    #     return True, data
+    # else:
+    #     run_logger(f"DISCARD - {structure}/{carbon_structure}/{dopant}/{metal} - Operating stability b_rel; {b_rel} > {cutoff} eV. Ref: ooh_rel; {ooh_rel}", str(__file__), 'error')
+    #     return False, None
+    return True, data

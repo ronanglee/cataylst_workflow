@@ -92,6 +92,6 @@ def vasp_input() -> dict:
         "zab_vdw": -1.8867,
         "luse_vdw": True,
         "maxmix": 200,
-        "ncore": 4,
+        "ncore": 8,
     }
     return params

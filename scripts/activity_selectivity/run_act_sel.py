@@ -24,9 +24,9 @@ def main(**data: dict) -> tuple[bool, dict | None]:
     metal = data["metal"]
     carbon_structure = data["carbon_structure"]
     dopant = data["dopant"]
-    adsorption_db = connect(database_dir / "adsorption.db")
+    adsorption_db = connect(database_dir / "e_adsorbate_without_corrections.db")
     pristine_db = connect(database_dir / "pristine_implicit.db")
-    thermal_corrections = json.load(open(os.path.join(database_dir, 'ads_vib_corrections.json')))
+    thermal_corrections = json.load(open(os.path.join(database_dir, 'e_ads_vib_corrections.json')))
     structure = str(Path(data["run_structure"]).stem)
     g_ooh = adsorption_db.get(name=structure, ads1="non", ads2="OOH").energy
     g_bare = pristine_db.get(name=structure).energy

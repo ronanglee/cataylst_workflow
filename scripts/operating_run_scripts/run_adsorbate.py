@@ -12,7 +12,8 @@ from utils import (  # type: ignore
     check_ion,
     read_and_write_database,
     run_logger,
-    magmons
+    magmons,
+    check_database
 )
 from vasp_input import vasp_input  # type: ignore
 
@@ -399,7 +400,7 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
                 if atom.symbol in mag.keys():
                     atom.magmom = mag[atom.symbol]
             params["istart"] = 0  # not to read WAVECAR
-            params["icharg"] = 1  # restrat from CHGCAR
+            params["icharg"] = 1  # restart from CHGCAR
             params["ldipol"] = True
             params["idipol"] = 3
             params["dipol"] = atoms.get_center_of_mass(scaled=True)
@@ -527,7 +528,7 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
             del data["pq_index"]
             data["ads1"] = "non"
             data["ads2"] = "OOH"
-            read_and_write_database(outcar, "adsorption", data)
+            read_and_write_database(outcar, "e_adsorbate_without_corrections", data)
             converged = True
 
     if converged:
@@ -553,11 +554,32 @@ def main(**data: dict) -> tuple[bool, Optional[dict]]:
     cwd = os.getcwd()
     ooh_dir = Path(str(data["adsorbate"])) / "implicit" / "vasp_rx"
     os.chdir(ooh_dir)
-    place_adsorbate(ooh_dir, data)
+    print(f'Relaxing adsorbate in {ooh_dir}')
     if os.path.exists('OUTCAR.RDip'):
         control = True
+    elif check_database('e_adsorbate_without_corrections', data):
+        print('In master database already')
+        control = True
     else:
+        place_adsorbate(ooh_dir, data)
         control = relax_adsorbate(ooh_dir, data)
+    # for f in [
+    #     "CHG",
+    #     "CHGCAR",
+    #     "WAVECAR",
+    #     "POSCAR",
+    #     "CONTCAR",
+    #     "DOSCAR",
+    #     "EIGENVAL",
+    #     "PROCAR",
+    # ]:
+    #     os.system("rm %s" % f)
+    # cwd = os.getcwd()
+    # outcar = Path(cwd) / "OUTCAR.RDip"
+    # del data["pq_index"]
+    # data["ads1"] = "non"
+    # data["ads2"] = "OOH"
+    # read_and_write_database(outcar, "e_adsorbate_without_corrections", data)
     os.chdir(cwd)
     if control:
         return True, data

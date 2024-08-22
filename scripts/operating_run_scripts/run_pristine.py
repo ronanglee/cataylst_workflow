@@ -11,7 +11,8 @@ from utils import (  # type: ignore
     check_ion,
     read_and_write_database,
     run_logger,
-    magmons
+    magmons,
+    check_database
 )
 from vasp_input import vasp_input  # type: ignore
 
@@ -326,6 +327,12 @@ def main(**data: dict) -> tuple[bool, Optional[dict]]:
     del copy_data["pq_index"]
     for directory in [vac_dir, implicit_dir]:
         os.chdir(directory)
+        db_name = "pristine_implicit"
+        print(f"Running {directory}")
+        if check_database(db_name, copy_data):
+            print('In master database already')
+            controls.append(True)
+            break
         if os.path.exists("OUTCAR.RDip"):
             controls.append(True)
             continue

@@ -6,6 +6,7 @@ from utils import (  # type: ignore
     read_and_write_database,
     run_logger,
     synthesis_stability_run_vasp,
+    check_database
 )
 from vasp_input import vasp_input  # type: ignore
 
@@ -32,16 +33,17 @@ def e_c(data: dict, vasp_parameters: dict) -> bool:
         os.path.join(base_dir, "template_structures", "carbon", f"{carbon_structure}")
     )
     structure = read(os.path.join(struct_dir, "init.POSCAR"))
+    data["name"] = data["carbon_structure"]
     cwd = os.getcwd()
     structure.write(e_c_dir / "init.POSCAR")
     if os.path.exists(e_c_dir / "OUTCAR.opt"):
-        outcar = Path(e_c_dir) / "OUTCAR.opt"
-        data["name"] = data["carbon_structure"]
+        return True
+    if check_database("e_c", data):
+        print('In master database already')
         return True
     converged = synthesis_stability_run_vasp(e_c_dir, vasp_parameters, "e_c")
     if converged:
         outcar = Path(e_c_dir) / "OUTCAR.opt"
-        data["name"] = data["carbon_structure"]
         read_and_write_database(outcar, "e_c", data)
         os.chdir(cwd)
         return True

@@ -9,6 +9,7 @@ from utils import (  # type: ignore
     read_and_write_database,
     run_logger,
     synthesis_stability_run_vasp,
+    check_database
 )
 from vasp_input import vasp_input  # type: ignore
 
@@ -25,10 +26,9 @@ def e_mxc(data: dict, vasp_parameters: dict) -> bool:
     """
     struc_path = Path(data["run_structure"])
     base_dir = Path(data["base_dir"])
-    dopant = data["dopant"]
     structure_name = Path(struc_path).stem
-    dopant_template = Path(struc_path).stem.replace("B", dopant)
-    dopant_template_path = struc_path.parent / dopant_template
+    dopant_template_path = struc_path.parent / structure_name
+    data["name"] = str(Path(data["run_structure"]).stem)
     structure = read(os.path.join(dopant_template_path, "init.POSCAR"))
     e_mxc_dir = Path(
         os.path.join(
@@ -36,22 +36,16 @@ def e_mxc(data: dict, vasp_parameters: dict) -> bool:
         )
     )
     if os.path.exists(e_mxc_dir):
-        outcar = Path(e_mxc_dir) / "OUTCAR.opt"
-        data["name"] = str(Path(data["run_structure"]).stem)
+        return True
+    if check_database("e_mxc", data):
+        print('In master database already')
         return True
     e_mxc_dir.mkdir(parents=True, exist_ok=True)
-    if dopant != "":
-        if dopant != 'O':
-            if dopant != 'SB':
-                for atoms in structure:
-                    if atoms.symbol == "B":
-                        atoms.symbol = dopant
     structure.write(e_mxc_dir / "init.POSCAR")
     cwd = os.getcwd()
     converged = synthesis_stability_run_vasp(e_mxc_dir, vasp_parameters, "e_mxc")
     if converged:
         outcar = Path(e_mxc_dir) / "OUTCAR.opt"
-        data["name"] = str(Path(data["run_structure"]).stem)
         read_and_write_database(outcar, "e_mxc", data)
         os.chdir(cwd)
         return True
