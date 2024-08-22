@@ -24,9 +24,9 @@ def e_xch(data: dict, vasp_parameters: dict) -> bool:
     config = Path(data["run_dir"]).stem
     structure = Path(data["run_dir"]).parent.stem
     data["name"] = f'{structure}-{config}'
-    # if os.path.exists(run_dir / "vibration.txt"):
-    #     return True
-    # print('entering e_xch')
+    if os.path.exists(run_dir / "vibration.txt"):
+        return True
+    print('entering e_xch')
     master_database_dir = '/home/energy/rogle/asm_orr_rxn/master_databases'
     if check_database("e_xch_solv_implicit_without_corrections", data):
         print('In master e_xch_solv_implicit_without_corrections database already')
