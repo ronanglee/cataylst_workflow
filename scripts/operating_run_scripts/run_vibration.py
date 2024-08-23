@@ -102,7 +102,7 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
             print("Error: electronic scf")
             err = 1
         else:
-            adsorbate_id = get_adsorbateid('OOH')
+            adsorbate_id = get_adsorbateid('initial_ads.POSCAR', len('OOH'))
             ext = "preSP"
             for f in [
                 "INCAR",
@@ -230,7 +230,7 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
                 indices = [atom.index for atom in init_poscar]
                 current_indices = [atom.index for atom in atoms]
                 len_vib = len(current_indices) - len(indices)
-                adsorbate_id = get_adsorbateid(len_vib)
+                adsorbate_id = get_adsorbateid('initial_ads.POSCAR', len_vib)
                 nsw = calc7.int_params["nsw"]
                 control_ion = check_ion(nsw)
                 if control_ion == 1:
@@ -286,7 +286,6 @@ def main(**data: dict) -> tuple[bool, None]:
     """
     cwd = os.getcwd()
     vib_dir = Path(str(data["adsorbate"])) / "implicit" / "vibration"
-    print('vib_dir', vib_dir)
     os.chdir(vib_dir)
     master_database_dir = '/home/energy/rogle/asm_orr_rxn/master_databases'
     if os.path.exists("vibration.txt"):

@@ -157,7 +157,7 @@ def generate_input_files(
 
 # If A in metal it will mess up the above code...
 # metals = ['Co']
-metals =  ["Pt"]
+metals =  ["Co"]
 dopants = []
 # Understanding and Mitigation Approaches
 run_structures, local_structures = generate_input_files(metals, base_dir, dopants)
