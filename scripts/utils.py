@@ -56,20 +56,21 @@ ad
     else:
         return 0
 
-def get_adsorbateid(len_vib: int) -> list:
+def get_adsorbateid(file, len_vib: int) -> list:
     """Get the adsorbate id.
 
     Args:
+        file (Path): Path to the file containing the initial geometry.
         len_vib (int): Number of adsorbate atoms.
 
     Returns:
        adsorbate_id (int): Adsorbate atoms IDs.
     """
-    system = read("init.POSCAR")
+    system = read(file)
     initial_distances = []
     for idx, atom in enumerate(system):
         initial_distances.append((idx, atom.z))
-    sorted_list = sorted(initial_distances, key=lambda t: t[1])[-len_vib :]  # noqa
+    sorted_list = sorted(initial_distances, key=lambda t: t[1])[-int(len_vib) :]  # noqa
     adsorbate_id = [i[0] for i in sorted_list]
     return adsorbate_id
 
@@ -379,7 +380,7 @@ def operating_stability_run_vasp(
                     indices = [atom.index for atom in init_poscar][:-1] # exclude the metal atom
                     current_indices = [atom.index for atom in atoms]
                     len_vib = len(current_indices) - len(indices)
-                    adsorbate_id = get_adsorbateid(len_vib)
+                    adsorbate_id = get_adsorbateid('init.POSCAR', len_vib)
                     vibindices = adsorbate_id
                     vib = Vibrations(atoms, indices=vibindices, name="vib", delta=0.01, nfree=2)
                     vib.run()
@@ -415,7 +416,6 @@ def operating_stability_run_vasp(
 
 def create_database(save_file):
     # Connect to SQLite database (or create it if it doesn't exist)
-    database_dir = '/home/energy/rogle/asm_orr_rxn/master_databases'
     conn = sqlite3.connect(f'{save_file}.db')
     cursor = conn.cursor()
 
@@ -659,15 +659,7 @@ def check_database(database: str, data: dict) -> bool:
     check_duplicates = []
     for i in db.select(name=data['name']):
         check_duplicates.append(i)
-    duplicates = 0
     if len(check_duplicates) == 1:
-        base_dir = Path(data['base_dir']) / 'runs' / 'databases'
-        copy_db = connect(os.path.join(base_dir, f'{database}.db'))
-        for i in copy_db.select(name=data['name']):
-            duplicates += 1
-        if duplicates < 1:
-            print(data['name'])
-            copy_db.write(check_duplicates[0])
         return True
     else:
         return False
@@ -691,7 +683,6 @@ def read_sql_database(database: str, data: dict) -> bool:
     ''', (config_name, value))
 
 def insert_data(save_file, data):
-    print(save_file)
     create_database(save_file)
     conn = sqlite3.connect(f'{save_file}.db')
     cursor = conn.cursor()

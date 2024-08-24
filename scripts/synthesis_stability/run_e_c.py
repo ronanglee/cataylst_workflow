@@ -39,7 +39,7 @@ def e_c(data: dict, vasp_parameters: dict) -> bool:
     if os.path.exists(e_c_dir / "OUTCAR.opt"):
         return True
     if check_database("e_c", data):
-        print('In master database already')
+        print('In master database already', flush=True)
         return True
     converged = synthesis_stability_run_vasp(e_c_dir, vasp_parameters, "e_c")
     if converged:
@@ -48,7 +48,7 @@ def e_c(data: dict, vasp_parameters: dict) -> bool:
         os.chdir(cwd)
         return True
     else:
-        print(f"e_c calculation did not converge for {carbon_structure}.")
+        print(f"e_c calculation did not converge for {carbon_structure}.", flush=True)
         run_logger(f"e_c calculation did not converge for {carbon_structure}.", str(__file__), "error")
         os.chdir(cwd)
         raise ValueError(f"e_c calculation did not converge for {carbon_structure}.")

@@ -32,13 +32,13 @@ def e_mxc(data: dict, vasp_parameters: dict) -> bool:
     structure = read(os.path.join(dopant_template_path, "init.POSCAR"))
     e_mxc_dir = Path(
         os.path.join(
-            base_dir, "runs", "synthesis_stability", "e_mxc", f"{structure_name}"
+            base_dir, "runs", "synthesis_stability", "e_mxc", f"{structure_name}", 'OUTCAR.opt'
         )
     )
     if os.path.exists(e_mxc_dir):
         return True
     if check_database("e_mxc", data):
-        print('In master database already')
+        print('In master database already', flush=True)
         return True
     e_mxc_dir.mkdir(parents=True, exist_ok=True)
     structure.write(e_mxc_dir / "init.POSCAR")
@@ -51,7 +51,7 @@ def e_mxc(data: dict, vasp_parameters: dict) -> bool:
         return True
     else:
         run_logger(f"e_mxc calculation did not converge for {structure}.", str(__file__), "error")
-        print(f"e_mxc calculation did not converge for {structure}.")
+        print(f"e_mxc calculation did not converge for {structure}.", flush=True)
         os.chdir(cwd)
         raise ValueError(f"e_mxc calculation did not converge for {structure}.")
 

@@ -37,7 +37,7 @@ def e_xc(data: dict, vasp_parameters: dict) -> bool:
     if os.path.exists(remove_metal_dir / "OUTCAR.opt"):
         return True
     if check_database("e_xc", data):
-        print('In master database already')
+        print('In master database already', flush=True)
         return True
     converged = synthesis_stability_run_vasp(remove_metal_dir, vasp_parameters, "e_xc")
     if converged:
@@ -46,7 +46,7 @@ def e_xc(data: dict, vasp_parameters: dict) -> bool:
         return True
     else:
         run_logger("e_xc calculation did not converge.", str(__file__), "error")
-        print("e_xc calculation did not converge.")
+        print("e_xc calculation did not converge.", flush=True)
         raise ValueError("e_xc calculation did not converge.")
 
 def main(**data: dict) -> tuple[bool, None]:

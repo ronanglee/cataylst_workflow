@@ -42,10 +42,10 @@ def e_m_on_c(data: dict, vasp_parameters: dict) -> bool:
     if os.path.exists(e_m_on_c_dir / "OUTCAR.opt"):
         outcar = Path(e_m_on_c_dir) / "OUTCAR.opt"
         run_logger(f"e_m_on_c calculation already exists for {metal} on {carbon_structure}.", str(__file__), "info")
-        print(f"e_m_on_c calculation already exists for {metal} on {carbon_structure}.")
+        print(f"e_m_on_c calculation already exists for {metal} on {carbon_structure}.", flush=True)
         return True
     if check_database("e_m_on_c", skimmed_data):
-        print('In master database already')        
+        print('In master database already', flush=True)        
         return True
     e_m_on_c_dir.mkdir(parents=True, exist_ok=True)
     struct_dir = Path(
@@ -68,7 +68,7 @@ def e_m_on_c(data: dict, vasp_parameters: dict) -> bool:
         return True
     else:
         run_logger(f"e_m_on_c calculation did not converge for {metal} on {carbon_structure}.", str(__file__), "error")
-        print(f"e_m_on_c calculation did not converge for {metal} on {carbon_structure}.")
+        print(f"e_m_on_c calculation did not converge for {metal} on {carbon_structure}.", flush=True)
         os.chdir(cwd)
         raise ValueError(f"e_m_on_c calculation did not converge for {metal} on {carbon_structure}.")
 
