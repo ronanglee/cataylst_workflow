@@ -32,11 +32,13 @@ def e_mxc(data: dict, vasp_parameters: dict) -> bool:
     structure = read(os.path.join(dopant_template_path, "init.POSCAR"))
     e_mxc_dir = Path(
         os.path.join(
-            base_dir, "runs", "synthesis_stability", "e_mxc", f"{structure_name}", 'OUTCAR.opt'
+            base_dir, "runs", "synthesis_stability", "e_mxc", f"{structure_name}"
         )
     )
-    if os.path.exists(e_mxc_dir):
-        print(f"e_mxc calculation already exists for {structure_name}.", flush=True)
+    if os.path.exists(os.path.join(e_mxc_dir, 'OUTCAR.opt')):
+        print(f"e_mxc calculation already exists for {structure_name} in ", os.path.join(
+           e_mxc_dir, 'OUTCAR.opt'
+        ), flush=True)
         return True
     if check_database("e_mxc", data):
         print('In master database already', flush=True)
