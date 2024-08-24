@@ -36,7 +36,7 @@ def e_mxc(data: dict, vasp_parameters: dict) -> bool:
         )
     )
     if os.path.exists(e_mxc_dir):
-        print(f"e_mxc calculation already exists for {structure}.", flush=True)
+        print(f"e_mxc calculation already exists for {structure_name}.", flush=True)
         return True
     if check_database("e_mxc", data):
         print('In master database already', flush=True)
