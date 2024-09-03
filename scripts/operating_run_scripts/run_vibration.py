@@ -72,14 +72,12 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
     database[struc_name]["ads1"] = "non"
     database[struc_name]["ads2"] = "OOH"
     database['name'] = f'{list(database.keys())[0]}'
-    print(database, flush=True)
-    print(database['name'], flush=True)
     if os.path.exists("vibration.txt"):
         if not check_for_duplicates_sql(os.path.join(data_base_folder, 'e_ads_vib_corrections'), database):
             correction = get_vibrational_correction()
             database[struc_name]["correction"] = correction
             insert_data(os.path.join(data_base_folder, 'e_ads_vib_corrections'), [list(database.keys())[0], list(database.values())[0]])
-            return True
+        return True
     err = 0
     mag = magmons()
     calc = Vasp(**paramscopy)  
