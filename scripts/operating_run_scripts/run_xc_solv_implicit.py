@@ -37,9 +37,9 @@ def e_xc(data: dict, vasp_parameters: dict) -> bool:
     name = str(Path(data["run_structure"]).stem).replace(metal, "M")
     outcar = Path(remove_metal_dir) / "OUTCAR.RDip"
     if os.path.exists(remove_metal_dir / "OUTCAR.RDip"):
-        print(f"e_xc_solv_implicit calculation already exists for {name} in {remove_metal_dir}")
+        print(f"e_xc_solv_implicit calculation already exists for {name} in {remove_metal_dir}", flush=True)
         if not check_database("e_xc_solv_implicit", data, master=False):
-            print(f"Writing to local database for {name}")
+            print(f"Writing to local database for {name}", flush=True)
             read_and_write_database(outcar, "e_xc_solv_implicit", data)
         return True
     if check_database("e_xc_solv_implicit", data, master=True):

@@ -76,6 +76,7 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
         if not check_for_duplicates_sql(os.path.join(data_base_folder, 'e_ads_vib_corrections'), database):
             correction = get_vibrational_correction()
             database[struc_name]["correction"] = correction
+            print('Inserting into vibrational database', flush=True)
             insert_data(os.path.join(data_base_folder, 'e_ads_vib_corrections'), [list(database.keys())[0], list(database.values())[0]])
         return True
     err = 0

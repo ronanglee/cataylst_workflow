@@ -48,7 +48,7 @@ def check_geometry(cwd: os.PathLike) -> int:
     c_avg = sum(carbons) / len(carbons)
     difference = abs(metal_z - c_avg)
     if difference > 2.0:
-        print("Error: metal-C distance")
+        print("Error: metal-C distance", flush=True)
         control = 0
     return control
 
@@ -329,11 +329,11 @@ def main(**data: dict) -> tuple[bool, Optional[dict]]:
     for directory in [vac_dir, implicit_dir]:
         os.chdir(directory)
         db_name = "pristine_implicit"
-        print(f"Running {directory}")
+        print(f"Running {directory}", flush=True)
         cwd = os.getcwd()
         outcar = Path(cwd) / "OUTCAR.RDip"
         if check_database(db_name, copy_data, master=True):
-            print('In master database already')
+            print('In master database already', flush=True)
             controls.append(True)
             break
         if os.path.exists("OUTCAR.RDip"):
@@ -347,7 +347,6 @@ def main(**data: dict) -> tuple[bool, Optional[dict]]:
                 elif "vac" in str(cwd):
                     read_and_write_database(outcar, "pristine_vac", copy_data)
             controls.append(True)
-            continue
         else:
             controls.append(relax_pristine(directory, copy_data))
     os.chdir(original_dir)

@@ -90,7 +90,7 @@ def synthesis_stability_run_vasp(
     converged = False
     control_ion = 0
     os.chdir(directory)
-    print(f"Running {calculation} calculation in {directory}")
+    print(f"Running {calculation} calculation in {directory}", flush=True)
     atoms = read(os.path.join(directory, "init.POSCAR"))
     mag = magmons()
     for atom in atoms:
@@ -185,7 +185,7 @@ def synthesis_stability_run_vasp(
     if converged:
         return True
     else:
-        print(f"{calculation} calculation did not converge.")
+        print(f"{calculation} calculation did not converge.", flush=True)
         return False
     
 def operating_stability_run_vasp(
