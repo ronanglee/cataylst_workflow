@@ -205,7 +205,7 @@ def operating_stability_run_vasp(
     converged = False
     control_ion = 0
     os.chdir(directory)
-    print(f"Running {calculation} calculation in {directory}")
+    print(f"Running {calculation} calculation in {directory}", flush=True)
     atoms = read(os.path.join(directory, "init.POSCAR"))
     mag = magmons()
     for atom in atoms:
@@ -218,7 +218,7 @@ def operating_stability_run_vasp(
             correction = get_vibrational_correction()
             struc_name = Path(data["run_dir"]).parent.stem
             config = Path(data['run_dir']).stem
-            database = [f'{struc_name}_{config}', correction]
+            database = [f'{struc_name}-{config}', correction]
             data_base_folder = Path(data["base_dir"]) / "runs" / "databases"
             insert_data(os.path.join(data_base_folder, 'e_xch_vib_solv_implicit_corrections'), database)
             return True
@@ -400,7 +400,7 @@ def operating_stability_run_vasp(
                     correction = get_vibrational_correction()
                     struc_name = Path(data["run_dir"]).parent.stem
                     config = Path(data['run_dir']).stem
-                    database = [f'{struc_name}_{config}', correction]
+                    database = [f'{struc_name}-{config}', correction]
                     data_base_folder = Path(data["base_dir"]) / "runs" / "databases"
                     insert_data(os.path.join(data_base_folder, 'e_xch_vib_solv_implicit_corrections'), database)
                     converged = True

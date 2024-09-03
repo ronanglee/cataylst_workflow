@@ -28,9 +28,7 @@ def e_xch(data: dict, vasp_parameters: dict) -> bool:
     master_database_dir = '/home/energy/rogle/asm_orr_rxn/master_databases'
     if check_database("e_xch_solv_implicit_without_corrections", data, master=True):
         print('In master e_xch_solv_implicit_without_corrections database already', flush=True)
-        copied_data = data.copy()
-        copied_data["name"] = f'{structure}_{config}'
-        if check_for_duplicates_sql(f"{master_database_dir}/e_xch_vib_solv_implicit_corrections_master", copied_data):
+        if check_for_duplicates_sql(f"{master_database_dir}/e_xch_vib_solv_implicit_corrections_master", data):
             print('In master e_xch_vib_solv_implicit_corrections database already', flush=True)
             return True
     converged = operating_stability_run_vasp(

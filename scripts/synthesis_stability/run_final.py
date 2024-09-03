@@ -70,25 +70,25 @@ def main(**data: dict) -> tuple[bool, dict | None]:
     # g_a = e_xc + e_m_on_c - e_c - e_mxc
     # g_d = e_m + e_xc - e_mxc
     # hof = e_mxc - e_m - e_xc
-    database_data = {
-        # "g_a": g_a,
-        # "g_d": g_d,
-        # "hof": hof,
-        "carbon_structure": carbon_structure,
-        "metal": metal,
-        "dopant": data["dopant"],
-        "run_structure": data["run_structure"],
-        "base_dir": str(base_dir),
-    }
-    database[structure] = database_data
-    add_entry(os.path.join(data_base_folder, "synthesis_stability.json"), database)
-    del data["pq_index"]
+    # database_data = {
+    #     # "g_a": g_a,
+    #     # "g_d": g_d,
+    #     # "hof": hof,
+    #     "carbon_structure": carbon_structure,
+    #     "metal": metal,
+    #     "dopant": data["dopant"],
+    #     "run_structure": data["run_structure"],
+    #     "base_dir": str(base_dir),
+    # }
+    # database[structure] = database_data
+    # add_entry(os.path.join(data_base_folder, "synthesis_stability.json"), database)
+    # del data["pq_index"]
 
-    # if hof > 0:
-    #     run_logger(f"DISCARD - {structure}/{carbon_structure}/{dopant}/{metal} - Heat of formation; {hof} < 0 eV", str(__file__), 'error')
-    #     return False, None
-    # if g_a > 0:
-    add_entry(os.path.join(data_base_folder, "seperated_synthesis_stability.json"), database)
+    # # if hof > 0:
+    # #     run_logger(f"DISCARD - {structure}/{carbon_structure}/{dopant}/{metal} - Heat of formation; {hof} < 0 eV", str(__file__), 'error')
+    # #     return False, None
+    # # if g_a > 0:
+    # add_entry(os.path.join(data_base_folder, "seperated_synthesis_stability.json"), database)
     return True, data
     # else:
     #     run_logger(f"DISCARD - {structure}/{carbon_structure}/{dopant}/{metal} - Synthesis stability g_a; {g_a} > 0 eV.", str(__file__), 'error')
