@@ -213,6 +213,15 @@ def operating_stability_run_vasp(
             atom.magmom = mag[atom.symbol]
     control_ion = 0
     data_base_folder = Path(data["base_dir"]) / "runs" / "databases"
+    if os.path.exists("vibration.txt"):
+        if not check_for_duplicates_sql(f"{data_base_folder}/e_xch_vib_solv_implicit_corrections", data):
+            correction = get_vibrational_correction()
+            struc_name = Path(data["run_dir"]).parent.stem
+            config = Path(data['run_dir']).stem
+            database = [f'{struc_name}_{config}', correction]
+            data_base_folder = Path(data["base_dir"]) / "runs" / "databases"
+            insert_data(os.path.join(data_base_folder, 'e_xch_vib_solv_implicit_corrections'), database)
+            return True
     if not os.path.exists("OUTCAR.RDip"):
         # static calculation always at the beginning
         vasp_parameters["istart"] = 0  # strart from being from scratch
@@ -644,18 +653,23 @@ def read_and_write_database(outcar: os.PathLike, database: str, data: dict) -> N
     structure = read(f'{outcar}@-1')
     db.write(structure, key_value_pairs={**data})
 
-def check_database(database: str, data: dict) -> bool:
-    '''Check if the master ASE atabase already contains the data.
+def check_database(database: str, data: dict, master: bool) -> bool:
+    '''Check if the ASE database already contains the data.
         
     Args:
         database (str): Name of the database.
         data (dict): Dictionary containing the data to be checked.
+        master (bool): True if the database is the master database, False otherwise.
     
     Returns:
         bool: True if the database contains the data, False otherwise.      
     '''
-    database_dir = '/home/energy/rogle/asm_orr_rxn/master_databases'
-    db = connect(os.path.join(database_dir, f'{database}_master.db'))
+    if master:
+        database_dir = Path('/home/energy/rogle/asm_orr_rxn/master_databases')
+        db = connect(database_dir / f'{database}_master.db')
+    else:
+        data_base_folder = Path(data["base_dir"]) / "runs" / "databases"
+        db = connect(data_base_folder / f"{database}.db") 
     check_duplicates = []
     for i in db.select(name=data['name']):
         check_duplicates.append(i)

@@ -71,6 +71,15 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
     database[struc_name]["metal"] = metal
     database[struc_name]["ads1"] = "non"
     database[struc_name]["ads2"] = "OOH"
+    database['name'] = f'{list(database.keys())[0]}'
+    print(database, flush=True)
+    print(database['name'], flush=True)
+    if os.path.exists("vibration.txt"):
+        if not check_for_duplicates_sql(os.path.join(data_base_folder, 'e_ads_vib_corrections'), database):
+            correction = get_vibrational_correction()
+            database[struc_name]["correction"] = correction
+            insert_data(os.path.join(data_base_folder, 'e_ads_vib_corrections'), [list(database.keys())[0], list(database.values())[0]])
+            return True
     err = 0
     mag = magmons()
     calc = Vasp(**paramscopy)  
@@ -288,9 +297,7 @@ def main(**data: dict) -> tuple[bool, None]:
     vib_dir = Path(str(data["adsorbate"])) / "implicit" / "vibration"
     os.chdir(vib_dir)
     master_database_dir = '/home/energy/rogle/asm_orr_rxn/master_databases'
-    if os.path.exists("vibration.txt"):
-        control_vibration = True
-    elif check_for_duplicates_sql(f"{master_database_dir}/e_ads_vib_corrections_master", data):
+    if check_for_duplicates_sql(f"{master_database_dir}/e_ads_vib_corrections_master", data):
         print('In master database already')
         control_vibration = True
     else:

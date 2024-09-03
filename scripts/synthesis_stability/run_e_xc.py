@@ -34,14 +34,18 @@ def e_xc(data: dict, vasp_parameters: dict) -> bool:
     remove_metal_dir.mkdir(exist_ok=True, parents=True)
     structure.write(remove_metal_dir / "init.POSCAR")
     data["name"] = str(Path(data["run_structure"]).stem).replace(metal, "M")
+    name = str(Path(data["run_structure"]).stem).replace(metal, "M")
+    outcar = Path(remove_metal_dir) / "OUTCAR.opt"
     if os.path.exists(remove_metal_dir / "OUTCAR.opt"):
+        if not check_database("e_xc", data, master=False):
+            print(f"Writing to local database for {name}", flush=True)
+            read_and_write_database(outcar, "e_xc", data)
         return True
-    if check_database("e_xc", data):
+    if check_database("e_xc", data, master=True):
         print('In master database already', flush=True)
         return True
     converged = synthesis_stability_run_vasp(remove_metal_dir, vasp_parameters, "e_xc")
     if converged:
-        outcar = Path(remove_metal_dir) / "OUTCAR.opt"
         read_and_write_database(outcar, "e_xc", data)
         return True
     else:

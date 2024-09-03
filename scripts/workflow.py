@@ -260,11 +260,12 @@ for idx, t1_data in enumerate(t1_data.values()):  # type: ignore
         t7 = Task(str(oper_stab_run_pristine), {}, resources=xeon24)
         t8 = Task(str(oper_stab_run_ads), {}, resources=xeon24)
         t9 = Task(str(oper_stab_run_vib), {}, resources=xeon24)
-        t10 = Task(str(relative_stab), {}, resources=xeon24)
-        t11 = Task(str(act_sel), {}, resources=xeon24)
-        swg2 = StaticWidthGroup(
-            [t4, t5, t6, t7, t8, t9, t10, t11], width=len(all_structures[idx * len(metals)])
-        )
+        # t10 = Task(str(relative_stab), {}, resources=xeon24)
+        # t11 = Task(str(act_sel), {}, resources=xeon24)
+        # swg2 = StaticWidthGroup(
+        #     [t4, t5, t6, t7, t8, t9, t10, t11], width=len(all_structures[idx * len(metals)])
+        # )
+        swg2 = StaticWidthGroup([t4, t5, t6, t7, t8, t9], width=len(all_structures[idx * len(metals)]))
         swf = Workflow({t3: [t1], swg2: [t3]})
         t3_wfs.append(swf)
     

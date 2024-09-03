@@ -37,8 +37,12 @@ def e_c(data: dict, vasp_parameters: dict) -> bool:
     cwd = os.getcwd()
     structure.write(e_c_dir / "init.POSCAR")
     if os.path.exists(e_c_dir / "OUTCAR.opt"):
+        print(f"e_c calculation already exists for {carbon_structure}.", flush=True)
+        if not check_database("e_c", data, master=False):
+            print(f"Writing to local database for {carbon_structure}.", flush=True)
+            read_and_write_database(outcar, "e_c", data)
         return True
-    if check_database("e_c", data):
+    if check_database("e_c", data, master=True):
         print('In master database already', flush=True)
         return True
     converged = synthesis_stability_run_vasp(e_c_dir, vasp_parameters, "e_c")

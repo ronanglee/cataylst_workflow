@@ -279,7 +279,6 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
                             os.system("cp %s %s.%s" % (f, f, ext))
                         converged = True
                         outcar = Path(cwd) / "OUTCAR.RDip"
-                        data["name"] = str(Path(data["run_structure"]).stem)
                         if "implicit" in str(cwd):
                             read_and_write_database(
                                 outcar, "pristine_implicit", data
@@ -318,27 +317,40 @@ def main(**data: dict) -> tuple[bool, Optional[dict]]:
     Returns:
        Perqueue return tuple.
     """
-    cwd = os.getcwd()
+    original_dir = os.getcwd()
     prisitine_dir = Path(str(data["pristine"]))
     vac_dir = prisitine_dir / "vac" / "vasp_rx"
     implicit_dir = prisitine_dir / "implicit" / "vasp_rx"
     copy_data = data.copy()
     controls = []
     del copy_data["pq_index"]
+    data["name"] = str(Path(data["run_structure"]).stem)
+    name = str(Path(data["run_structure"]).stem)
     for directory in [vac_dir, implicit_dir]:
         os.chdir(directory)
         db_name = "pristine_implicit"
         print(f"Running {directory}")
-        if check_database(db_name, copy_data):
+        cwd = os.getcwd()
+        outcar = Path(cwd) / "OUTCAR.RDip"
+        if check_database(db_name, copy_data, master=True):
             print('In master database already')
             controls.append(True)
             break
         if os.path.exists("OUTCAR.RDip"):
+            print(f"OUTCAR.RDip exists in {cwd}")
+            if not check_database(db_name, copy_data, master=False):
+                print(f'Writing to local database for {name}', flush=True)
+                if "implicit" in str(cwd):
+                    read_and_write_database(
+                        outcar, "pristine_implicit", copy_data
+                    )
+                elif "vac" in str(cwd):
+                    read_and_write_database(outcar, "pristine_vac", copy_data)
             controls.append(True)
             continue
         else:
             controls.append(relax_pristine(directory, copy_data))
-    os.chdir(cwd)
+    os.chdir(original_dir)
     del copy_data["pristine"]
     if all(controls):
         return True, copy_data

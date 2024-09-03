@@ -60,7 +60,6 @@ def place_adsorbate(cwd: os.PathLike, data: dict) -> None:
             or folders[n] == "BEEF-vdW"
         ):
             break
-    print(folders)
     metal = folders[n + 2]
     ads2 = folders[n + 9]
     ads2site = folders[n + 10]
@@ -525,9 +524,6 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
             ]:
                 os.system("rm %s" % f)
             outcar = Path(cwd) / "OUTCAR.RDip"
-            del data["pq_index"]
-            data["ads1"] = "non"
-            data["ads2"] = "OOH"
             read_and_write_database(outcar, "e_adsorbate_without_corrections", data)
             converged = True
 
@@ -555,31 +551,22 @@ def main(**data: dict) -> tuple[bool, Optional[dict]]:
     ooh_dir = Path(str(data["adsorbate"])) / "implicit" / "vasp_rx"
     os.chdir(ooh_dir)
     print(f'Relaxing adsorbate in {ooh_dir}')
+    outcar = Path(cwd) / "OUTCAR.RDip"
+    del data["pq_index"]
+    data["ads1"] = "non"
+    data["ads2"] = "OOH"
     if os.path.exists('OUTCAR.RDip'):
+        print(f'Adsorbate relaxation already exists in {ooh_dir}')
+        if not check_database('e_adsorbate_without_corrections', data, master=False):
+            print(f'Writing to local database for {ooh_dir}')
+            read_and_write_database(outcar, 'e_adsorbate_without_corrections', data)
         control = True
-    elif check_database('e_adsorbate_without_corrections', data):
+    elif check_database('e_adsorbate_without_corrections', data, master=True):
         print('In master database already')
         control = True
     else:
         place_adsorbate(ooh_dir, data)
         control = relax_adsorbate(ooh_dir, data)
-    # for f in [
-    #     "CHG",
-    #     "CHGCAR",
-    #     "WAVECAR",
-    #     "POSCAR",
-    #     "CONTCAR",
-    #     "DOSCAR",
-    #     "EIGENVAL",
-    #     "PROCAR",
-    # ]:
-    #     os.system("rm %s" % f)
-    # cwd = os.getcwd()
-    # outcar = Path(cwd) / "OUTCAR.RDip"
-    # del data["pq_index"]
-    # data["ads1"] = "non"
-    # data["ads2"] = "OOH"
-    # read_and_write_database(outcar, "e_adsorbate_without_corrections", data)
     os.chdir(cwd)
     if control:
         return True, data
