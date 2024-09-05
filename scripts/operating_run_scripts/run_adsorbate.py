@@ -272,10 +272,10 @@ def check_geometry(cwd: os.PathLike, adsorbate_id: list) -> int:
     rxy = math.sqrt(dx * dx + dy * dy)
 
     """ 1. check adsorbate """
-    if rxy >= 3.0:
+    if rxy > 1.5:
         print("The adsorbate shifts from adsorption site (xy > 1.5 Angstrom)")
         control = 0
-    elif dz > 4.0:
+    elif dz > 3.5:
         print("The adsorbate deadsorps (z > 3.5 Angstrom)")
         control = 0
 
