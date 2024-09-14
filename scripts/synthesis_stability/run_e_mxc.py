@@ -6,7 +6,7 @@ from ase.db import connect  # type: ignore
 from ase.io import read  # type: ignore
 from perqueue.constants import INDEX_KW  # type: ignore
 from utils import (  # type: ignore
-    check_database,
+    check_ase_database,
     read_and_write_database,
     run_logger,
     synthesis_stability_run_vasp,
@@ -22,7 +22,7 @@ def e_mxc(data: dict, vasp_parameters: dict) -> bool:
         vasp_parameters (dict): Dictionary containing the VASP parameters.
 
     Returns:
-       True if all the SCF calculations have converged, False otherwise.
+       converged (bool): True if all the SCF calculations have converged, raise error otherwise.
     """
     struc_path = Path(data["run_structure"])
     base_dir = Path(data["base_dir"])
@@ -42,11 +42,11 @@ def e_mxc(data: dict, vasp_parameters: dict) -> bool:
             f"e_mxc calculation already exists for {structure_name} in ",
             os.path.join(e_mxc_dir, "OUTCAR.opt"),
         )
-        if not check_database("e_mxc", data, master=False):
+        if not check_ase_database("e_mxc", data, master=False):
             print(f"Writing to local database for {name}", flush=True)
             read_and_write_database(outcar, "e_mxc", data)
         return True
-    if check_database("e_mxc", data, master=True):
+    if check_ase_database("e_mxc", data, master=True):
         print("In master database already", flush=True)
         return True
     e_mxc_dir.mkdir(parents=True, exist_ok=True)

@@ -6,36 +6,12 @@ from ase.io import read, write  # type: ignore
 from perqueue import PersistentQueue  # type: ignore
 from perqueue.task_classes.task import Task  # type: ignore
 from perqueue.task_classes.task_groups import StaticWidthGroup, Workflow  # type: ignore
-from utils import gather_structs, get_xch_structs, run_logger  # type: ignore
-
-
-def read_config(file_path: os.PathLike) -> dict:
-    """Reads the configuration file.
-
-    Args:
-        file_path (os.PathLike): Path to the configuration file.
-
-    Returns:
-        dict: Configuration file as dictionary.
-    """
-    config_dict = {}
-    value: list | bool | str = ""
-    with open(file_path, "r") as file:
-        for line in file:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            key, value = line.split("=", 1)
-            if "," in value:
-                value = value.split(",")
-            if isinstance(value, str):
-                if value.lower() in ["true", "false"]:
-                    if value.lower() == "true":
-                        value = True
-                    else:
-                        value = False
-            config_dict[key.strip()] = value
-    return config_dict
+from utils import (  # type: ignore
+    gather_structs,
+    get_xch_structs,
+    read_config,
+    run_logger,
+)
 
 
 def generate_input_files(metals: list, base_dir: os.PathLike) -> tuple[list, set, list]:
@@ -86,7 +62,7 @@ def generate_input_files(metals: list, base_dir: os.PathLike) -> tuple[list, set
     return (run_structures, set(local_structures), dopants)
 
 
-config = read_config(Path("config.txt"))
+config = read_config()
 base_dir = Path(__file__).parent.parent
 
 # Perqueue needs files not imported functions

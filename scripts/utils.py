@@ -221,10 +221,9 @@ def operating_stability_run_vasp(
         if atom.symbol in mag.keys():
             atom.magmom = mag[atom.symbol]
     control_ion = 0
-    data_base_folder = Path(data["base_dir"]) / "runs" / "databases"
     if os.path.exists("vibration.txt"):
         if not check_for_duplicates_sql(
-            f"{data_base_folder}/e_xch_vib_solv_implicit_corrections", data
+            "e_xch_vib_solv_implicit_corrections", data, master=False
         ):
             correction = get_vibrational_correction()
             struc_name = Path(data["run_dir"]).parent.stem
@@ -475,17 +474,24 @@ def create_database(save_file: str) -> None:
     conn.close()
 
 
-def check_for_duplicates_sql(save_file: str, data: dict) -> bool:
+def check_for_duplicates_sql(save_file: str, data: dict, master: bool) -> bool:
     """Check if the database already contains the data.
 
     Args:
        save_file (str): Name of the database.
        data (dict): Dictionary containing the data to be checked.
+       master (bool): True if the database is the master database, False otherwise.
 
     Returns:
         bool: True if the data is already in the database, False otherwise.
     """
-    conn = sqlite3.connect(f"{save_file}.db")
+    config = read_config()
+    if master:
+        data_base_folder = config["master_database_dir"]
+        conn = sqlite3.connect(os.path.join(data_base_folder, f"{save_file}_master.db"))
+    else:
+        data_base_folder = Path(data["base_dir"]) / "runs" / "databases"
+        conn = sqlite3.connect(os.path.join(data_base_folder, f"{save_file}.db"))
     cursor = conn.cursor()
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
 
@@ -629,7 +635,33 @@ def read_and_write_database(outcar: os.PathLike, database: str, data: dict) -> N
     db.write(structure, key_value_pairs={**data})
 
 
-def check_database(database: str, data: dict, master: bool) -> bool:
+def read_config() -> dict:
+    """Reads the configuration file.
+
+    Returns:
+        config_dict (dict): Configuration file as dictionary.
+    """
+    config_dict = {}
+    value: list | bool | str = ""
+    with open("config.txt", "r") as file:
+        for line in file:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            key, value = line.split("=", 1)
+            if "," in value:
+                value = value.split(",")
+            if isinstance(value, str):
+                if value.lower() in ["true", "false"]:
+                    if value.lower() == "true":
+                        value = True
+                    else:
+                        value = False
+            config_dict[key.strip()] = value
+    return config_dict
+
+
+def check_ase_database(database: str, data: dict, master: bool) -> bool:
     """Check if the ASE database already contains the data.
 
     Args:
@@ -640,8 +672,9 @@ def check_database(database: str, data: dict, master: bool) -> bool:
     Returns:
         bool: True if the database contains the data, False otherwise.
     """
+    config = read_config()
     if master:
-        database_dir = Path("/home/energy/rogle/asm_orr_rxn/master_databases")
+        database_dir = config["master_database_dir"]
         db = connect(database_dir / f"{database}_master.db")
     else:
         data_base_folder = Path(data["base_dir"]) / "runs" / "databases"

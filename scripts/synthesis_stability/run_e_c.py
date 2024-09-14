@@ -3,10 +3,10 @@ from pathlib import Path
 
 from ase.io import read  # type: ignore
 from utils import (  # type: ignore
+    check_ase_database,
     read_and_write_database,
     run_logger,
     synthesis_stability_run_vasp,
-    check_database
 )
 from vasp_input import vasp_input  # type: ignore
 
@@ -19,7 +19,7 @@ def e_c(data: dict, vasp_parameters: dict) -> bool:
         vasp_parameters (dict): Dictionary containing the VASP parameters.
 
     Returns:
-        True if all the SCF calculations have converged, False otherwise.
+        converged (bool): True if all the SCF calculations have converged, raise error otherwise.
     """
     carbon_structure = Path(data["carbon_structure"])
     base_dir = Path(data["base_dir"])
@@ -36,24 +36,28 @@ def e_c(data: dict, vasp_parameters: dict) -> bool:
     data["name"] = data["carbon_structure"]
     cwd = os.getcwd()
     structure.write(e_c_dir / "init.POSCAR")
+    outcar = Path(e_c_dir) / "OUTCAR.opt"
     if os.path.exists(e_c_dir / "OUTCAR.opt"):
         print(f"e_c calculation already exists for {carbon_structure}.", flush=True)
-        if not check_database("e_c", data, master=False):
+        if not check_ase_database("e_c", data, master=False):
             print(f"Writing to local database for {carbon_structure}.", flush=True)
             read_and_write_database(outcar, "e_c", data)
         return True
-    if check_database("e_c", data, master=True):
-        print('In master database already', flush=True)
+    if check_ase_database("e_c", data, master=True):
+        print("In master database already", flush=True)
         return True
     converged = synthesis_stability_run_vasp(e_c_dir, vasp_parameters, "e_c")
     if converged:
-        outcar = Path(e_c_dir) / "OUTCAR.opt"
         read_and_write_database(outcar, "e_c", data)
         os.chdir(cwd)
         return True
     else:
         print(f"e_c calculation did not converge for {carbon_structure}.", flush=True)
-        run_logger(f"e_c calculation did not converge for {carbon_structure}.", str(__file__), "error")
+        run_logger(
+            f"e_c calculation did not converge for {carbon_structure}.",
+            str(__file__),
+            "error",
+        )
         os.chdir(cwd)
         raise ValueError(f"e_c calculation did not converge for {carbon_structure}.")
 

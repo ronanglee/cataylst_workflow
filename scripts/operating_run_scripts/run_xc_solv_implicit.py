@@ -3,7 +3,7 @@ from pathlib import Path
 
 from ase.io import read  # type: ignore
 from utils import (  # type: ignore
-    check_database,
+    check_ase_database,
     operating_stability_run_vasp,
     read_and_write_database,
     run_logger,
@@ -19,7 +19,7 @@ def e_xc(data: dict, vasp_parameters: dict) -> bool:
         vasp_parameters (dict): Dictionary containing the VASP parameters.
 
     Returns:
-        bool: True if the calculation converged, False otherwise.
+        converged (bool): True if the calculation converged, raise error otherwise.
     """
     struc_path = Path(data["run_structure"])
     base_dir = Path(data["base_dir"])
@@ -42,11 +42,11 @@ def e_xc(data: dict, vasp_parameters: dict) -> bool:
             f"e_xc_solv_implicit calculation already exists for {name} in {remove_metal_dir}",
             flush=True,
         )
-        if not check_database("e_xc_solv_implicit", data, master=False):
+        if not check_ase_database("e_xc_solv_implicit", data, master=False):
             print(f"Writing to local database for {name}", flush=True)
             read_and_write_database(outcar, "e_xc_solv_implicit", data)
         return True
-    if check_database("e_xc_solv_implicit", data, master=True):
+    if check_ase_database("e_xc_solv_implicit", data, master=True):
         print("In master database already", flush=True)
         return True
     converged = operating_stability_run_vasp(

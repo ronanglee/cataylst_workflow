@@ -8,7 +8,7 @@ from ase.calculators.vasp import Vasp  # type: ignore
 from ase.db import connect  # type: ignore
 from ase.io import read, write  # type: ignore
 from utils import (  # type: ignore
-    check_database,
+    check_ase_database,
     check_electronic,
     check_ion,
     magmons,
@@ -565,11 +565,13 @@ def main(**data: dict) -> tuple[bool, Optional[dict]]:
     data["ads2"] = "OOH"  # type: ignore
     if os.path.exists("OUTCAR.RDip"):
         print(f"Adsorbate relaxation already exists in {ooh_dir}", flush=True)
-        if not check_database("e_adsorbate_without_corrections", data, master=False):
+        if not check_ase_database(
+            "e_adsorbate_without_corrections", data, master=False
+        ):
             print(f"Writing to local database for {ooh_dir}", flush=True)
             read_and_write_database(outcar, "e_adsorbate_without_corrections", data)
         control = True
-    elif check_database("e_adsorbate_without_corrections", data, master=True):
+    elif check_ase_database("e_adsorbate_without_corrections", data, master=True):
         print("In master database already", flush=True)
         control = True
     else:

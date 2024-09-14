@@ -7,7 +7,7 @@ from typing import Optional  # type: ignore
 from ase.calculators.vasp import Vasp  # type: ignore
 from ase.io import read  # type: ignore
 from utils import (  # type: ignore
-    check_database,
+    check_ase_database,
     check_electronic,
     check_ion,
     magmons,
@@ -61,7 +61,7 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
        data (dict): Dictionary containing the run parameters.
 
     Returns:
-       relaxed (bool): True if the calculation is done, False otherwise.
+       converged (bool): True if the calculation is done, raise error otherwise.
     """
     folders = str(cwd).split("/")
     for n in range(len(folders)):
@@ -333,13 +333,13 @@ def main(**data: dict) -> tuple[bool, Optional[dict]]:
         print(f"Running {directory}", flush=True)
         cwd = os.getcwd()
         outcar = Path(cwd) / "OUTCAR.RDip"
-        if check_database(db_name, copy_data, master=True):
+        if check_ase_database(db_name, copy_data, master=True):
             print("In master database already", flush=True)
             controls.append(True)
             break
         if os.path.exists("OUTCAR.RDip"):
             print(f"OUTCAR.RDip exists in {cwd}", flush=True)
-            if not check_database(db_name, copy_data, master=False):
+            if not check_ase_database(db_name, copy_data, master=False):
                 print(f"Writing to local database for {name}", flush=True)
                 if "implicit" in str(cwd):
                     read_and_write_database(outcar, "pristine_implicit", copy_data)

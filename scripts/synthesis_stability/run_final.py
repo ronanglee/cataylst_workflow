@@ -8,8 +8,7 @@ from utils import run_logger  # type: ignore
 
 def main(**data: dict) -> tuple[bool, dict | None]:
     """Read all the individual terms and calculate the operating stability of the catalyst.
-    g_a = e_xc + e_m_on_c - e_c - e_mxc
-    g_d = e_m + e_xc - e_mxc
+    g_a = -1 * (e_xc + e_m_on_c - e_c - e_mxc)
     hof = e_mxc - e_m - e_xc
     where x is the dopant, c is carbon and m is the metal.
 

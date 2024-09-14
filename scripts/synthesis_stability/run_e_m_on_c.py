@@ -3,11 +3,11 @@ from pathlib import Path
 
 from ase.io import read  # type: ignore
 from utils import (  # type: ignore
+    check_ase_database,
     gather_structs,
     read_and_write_database,
     run_logger,
     synthesis_stability_run_vasp,
-    check_database
 )
 from vasp_input import vasp_input  # type: ignore
 
@@ -20,7 +20,7 @@ def e_m_on_c(data: dict, vasp_parameters: dict) -> bool:
         vasp_parameters (dict): Dictionary containing the VASP parameters.
 
     Returns:
-        True if all the SCF calculations have converged, False otherwise.
+        converged (bool); True if all the SCF calculations have converged, raise error otherwise.
     """
     skimmed_data = data.copy()
     del skimmed_data["all_run_structures"]
@@ -43,14 +43,21 @@ def e_m_on_c(data: dict, vasp_parameters: dict) -> bool:
     outcar = Path(e_m_on_c_dir) / "OUTCAR.opt"
     if os.path.exists(e_m_on_c_dir / "OUTCAR.opt"):
         outcar = Path(e_m_on_c_dir) / "OUTCAR.opt"
-        run_logger(f"e_m_on_c calculation already exists for {metal} on {carbon_structure}.", str(__file__), "info")
-        print(f"e_m_on_c calculation already exists for {metal} on {carbon_structure}.", flush=True)
-        if not check_database("e_m_on_c", skimmed_data, master=False):
-            print(f'Writing to local database for {name}', flush=True)
+        run_logger(
+            f"e_m_on_c calculation already exists for {metal} on {carbon_structure}.",
+            str(__file__),
+            "info",
+        )
+        print(
+            f"e_m_on_c calculation already exists for {metal} on {carbon_structure}.",
+            flush=True,
+        )
+        if not check_ase_database("e_m_on_c", skimmed_data, master=False):
+            print(f"Writing to local database for {name}", flush=True)
             read_and_write_database(outcar, "e_m_on_c", skimmed_data)
         return True
-    if check_database("e_m_on_c", skimmed_data, master=True):
-        print('In master database already', flush=True)        
+    if check_ase_database("e_m_on_c", skimmed_data, master=True):
+        print("In master database already", flush=True)
         return True
     e_m_on_c_dir.mkdir(parents=True, exist_ok=True)
     struct_dir = Path(
@@ -70,10 +77,19 @@ def e_m_on_c(data: dict, vasp_parameters: dict) -> bool:
         os.chdir(cwd)
         return True
     else:
-        run_logger(f"e_m_on_c calculation did not converge for {metal} on {carbon_structure}.", str(__file__), "error")
-        print(f"e_m_on_c calculation did not converge for {metal} on {carbon_structure}.", flush=True)
+        run_logger(
+            f"e_m_on_c calculation did not converge for {metal} on {carbon_structure}.",
+            str(__file__),
+            "error",
+        )
+        print(
+            f"e_m_on_c calculation did not converge for {metal} on {carbon_structure}.",
+            flush=True,
+        )
         os.chdir(cwd)
-        raise ValueError(f"e_m_on_c calculation did not converge for {metal} on {carbon_structure}.")
+        raise ValueError(
+            f"e_m_on_c calculation did not converge for {metal} on {carbon_structure}."
+        )
 
 
 def main(**data: dict) -> tuple[bool, dict]:

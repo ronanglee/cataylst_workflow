@@ -28,7 +28,8 @@ def adsorbsite(slab: dict, metal: str, name: str) -> tuple:
        name (str): Adsorption site name.
 
     Returns:
-       tuple: x, y, z coordinates of the adsorption site."""
+       tuple: x, y, z coordinates of the adsorption site.
+    """
     if name[0] == "o" and name[6] == "m":
         print("adsorption site name = %s" % name, flush=True)
         for atom in slab:
@@ -51,7 +52,7 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
        data (dict): Dictionary containing the run parameters.
 
     Returns:
-       return (bool): True if the calculation is successful.
+        converged (bool): True if the calculation is successful, raise error otherwise.
     """
     folders = str(cwd).split("/")
     for n in range(len(folders)):
@@ -75,7 +76,7 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
     database["name"] = f"{list(database.keys())[0]}"
     if os.path.exists("vibration.txt"):
         if not check_for_duplicates_sql(
-            os.path.join(data_base_folder, "e_ads_vib_corrections"), database
+            "e_ads_vib_corrections", database, master=False
         ):
             correction = get_vibrational_correction()
             database[struc_name]["correction"] = correction
@@ -308,10 +309,7 @@ def main(**data: dict) -> tuple[bool, dict]:
     cwd = os.getcwd()
     vib_dir = Path(str(data["adsorbate"])) / "implicit" / "vibration"
     os.chdir(vib_dir)
-    master_database_dir = "/home/energy/rogle/asm_orr_rxn/master_databases"
-    if check_for_duplicates_sql(
-        f"{master_database_dir}/e_ads_vib_corrections_master", data
-    ):
+    if check_for_duplicates_sql("e_ads_vib_corrections_master", data, master=True):
         print("In master database already", flush=True)
         control_vibration = True
     else:
