@@ -2,12 +2,11 @@ import os
 from pathlib import Path
 
 from ase.io import read  # type: ignore
-from perqueue.constants import INDEX_KW  # type: ignore
 from utils import (  # type: ignore
+    check_database,
     read_and_write_database,
     run_logger,
     synthesis_stability_run_vasp,
-    check_database
 )
 from vasp_input import vasp_input  # type: ignore
 
@@ -42,7 +41,7 @@ def e_xc(data: dict, vasp_parameters: dict) -> bool:
             read_and_write_database(outcar, "e_xc", data)
         return True
     if check_database("e_xc", data, master=True):
-        print('In master database already', flush=True)
+        print("In master database already", flush=True)
         return True
     converged = synthesis_stability_run_vasp(remove_metal_dir, vasp_parameters, "e_xc")
     if converged:
@@ -52,6 +51,7 @@ def e_xc(data: dict, vasp_parameters: dict) -> bool:
         run_logger("e_xc calculation did not converge.", str(__file__), "error")
         print("e_xc calculation did not converge.", flush=True)
         raise ValueError("e_xc calculation did not converge.")
+
 
 def main(**data: dict) -> tuple[bool, None]:
     """Run the synthesis stability part of the workflow.

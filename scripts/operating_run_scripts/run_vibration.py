@@ -7,14 +7,14 @@ from ase.calculators.vasp import Vasp  # type: ignore
 from ase.io import read, write  # type: ignore
 from ase.vibrations import Vibrations  # type: ignore
 from utils import (  # type: ignore
-    insert_data,
     check_electronic,
-    get_vibrational_correction,
-    run_logger,
+    check_for_duplicates_sql,
     check_ion,
-    magmons,
     get_adsorbateid,
-    check_for_duplicates_sql
+    get_vibrational_correction,
+    insert_data,
+    magmons,
+    run_logger,
 )
 from vasp_input import vasp_input  # type: ignore
 
@@ -30,7 +30,7 @@ def adsorbsite(slab: dict, metal: str, name: str) -> tuple:
     Returns:
        tuple: x, y, z coordinates of the adsorption site."""
     if name[0] == "o" and name[6] == "m":
-        print("adsorption site name = %s" % name)
+        print("adsorption site name = %s" % name, flush=True)
         for atom in slab:
             if atom.symbol == metal:
                 metal_x = atom.x
@@ -39,8 +39,9 @@ def adsorbsite(slab: dict, metal: str, name: str) -> tuple:
         x = metal_x
         y = metal_y
         z = metal_z
-    print("adsorption site (x, y, z): %.3f %.3f %.3f" % (x, y, z))
+    print("adsorption site (x, y, z): %.3f %.3f %.3f" % (x, y, z), flush=True)
     return (x, y, z)
+
 
 def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
     """Calculate the vibration of the adsorbate.
@@ -71,18 +72,23 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
     database[struc_name]["metal"] = metal
     database[struc_name]["ads1"] = "non"
     database[struc_name]["ads2"] = "OOH"
-    database['name'] = f'{list(database.keys())[0]}'
+    database["name"] = f"{list(database.keys())[0]}"
     if os.path.exists("vibration.txt"):
-        if not check_for_duplicates_sql(os.path.join(data_base_folder, 'e_ads_vib_corrections'), database):
+        if not check_for_duplicates_sql(
+            os.path.join(data_base_folder, "e_ads_vib_corrections"), database
+        ):
             correction = get_vibrational_correction()
             database[struc_name]["correction"] = correction
-            print('Inserting into vibrational database', flush=True)
-            insert_data(os.path.join(data_base_folder, 'e_ads_vib_corrections'), [list(database.keys())[0], list(database.values())[0]])
+            print("Inserting into vibrational database", flush=True)
+            insert_data(
+                os.path.join(data_base_folder, "e_ads_vib_corrections"),
+                [list(database.keys())[0], list(database.values())[0]],
+            )
         return True
     err = 0
     mag = magmons()
-    calc = Vasp(**paramscopy)  
-    if not os.path.exists(os.path.join(cwd / 'OUTCAR.RDip')):
+    calc = Vasp(**paramscopy)
+    if not os.path.exists(os.path.join(cwd, "OUTCAR.RDip")):
         init_atoms = read(Path(cwd).parent / "vasp_rx" / "CONTCAR.RDip")
         write("initial_ads.POSCAR", init_atoms)
         atoms = read("initial_ads.POSCAR")
@@ -101,16 +107,16 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
         paramscopy = params.copy()
         calc1 = Vasp(**paramscopy)
         atoms.set_calculator(calc1)
-        print("static calculation")
+        print("static calculation", flush=True)
         atoms.get_potential_energy()
         """Check if a vasp calculation (electronic self consistance) is converged"""
         nelm = calc1.int_params["nelm"]
         control_electronic = check_electronic(nelm)
         if control_electronic == 0:
-            print("Error: electronic scf")
+            print("Error: electronic scf", flush=True)
             err = 1
         else:
-            adsorbate_id = get_adsorbateid('initial_ads.POSCAR', len('OOH'))
+            adsorbate_id = get_adsorbateid("initial_ads.POSCAR", len("OOH"))
             ext = "preSP"
             for f in [
                 "INCAR",
@@ -140,13 +146,13 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
             paramscopy = params.copy()
             calc2 = Vasp(**paramscopy)
             atoms.set_calculator(calc2)
-            print("dipole calculation")
+            print("dipole calculation", flush=True)
             atoms.get_potential_energy()
             """Check if a vasp calculation is converged"""
             nelm = calc2.int_params["nelm"]
             control_electronic = check_electronic(nelm)  # check electronic scf
             if control_electronic == 0:
-                print("Error: electronic scf")
+                print("Error: electronic scf", flush=True)
                 err = 1
             else:
                 ext = "preRDip"
@@ -180,13 +186,13 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
                 paramscopy = params.copy()
                 calc4 = Vasp(**paramscopy)
                 atoms.set_calculator(calc4)
-                print("dipole correction calculation")
+                print("dipole correction calculation", flush=True)
                 atoms.get_potential_energy()
                 """Check if a vasp electronic calculation is converged"""
                 nelm = calc4.int_params["nelm"]
                 control_electronic = check_electronic(nelm)  # check electronic scf
                 if control_electronic == 0:
-                    print("Error: electronic scf")
+                    print("Error: electronic scf", flush=True)
                     err = 1
                 else:
                     ext = "RDip"
@@ -205,7 +211,7 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
     # vibration calculation
     if os.path.exists("OUTCAR.RDip") or vib_done:
         if err == 0:
-            print("#vibration calculation")
+            print("#vibration calculation", flush=True)
             atoms = read("CONTCAR.RDip")
             for atom in atoms:
                 if atom.symbol in mag.keys():
@@ -231,14 +237,14 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
             nelm = calc7.int_params["nelm"]
             control_electronic = check_electronic(nelm)  # check electronic scf
             if control_electronic == 0:
-                print("Error: electronic scf")
+                print("Error: electronic scf", flush=True)
                 err = 1
             else:
-                init_poscar = read(os.path.join(data['run_structure'], 'init.POSCAR'))
+                init_poscar = read(os.path.join(data["run_structure"], "init.POSCAR"))
                 indices = [atom.index for atom in init_poscar]
                 current_indices = [atom.index for atom in atoms]
                 len_vib = len(current_indices) - len(indices)
-                adsorbate_id = get_adsorbateid('initial_ads.POSCAR', len_vib)
+                adsorbate_id = get_adsorbateid("initial_ads.POSCAR", len_vib)
                 nsw = calc7.int_params["nsw"]
                 control_ion = check_ion(nsw)
                 if control_ion == 1:
@@ -254,7 +260,9 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
                     ]:
                         os.system("cp %s %s.%s" % (f, f, ext))
                     vibindices = adsorbate_id
-                    vib = Vibrations(atoms, indices=vibindices, name="vib", delta=0.01, nfree=2)
+                    vib = Vibrations(
+                        atoms, indices=vibindices, name="vib", delta=0.01, nfree=2
+                    )
                     vib.run()
                     vib.get_energies()
                     vib.summary(log="vibration.txt")
@@ -262,7 +270,10 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
                         vib.write_mode(i)
                     correction = get_vibrational_correction()
                     database[struc_name]["correction"] = correction
-                    insert_data(os.path.join(data_base_folder, 'e_ads_vib_corrections'), [list(database.keys())[0], list(database.values())[0]])
+                    insert_data(
+                        os.path.join(data_base_folder, "e_ads_vib_corrections"),
+                        [list(database.keys())[0], list(database.values())[0]],
+                    )
                     # clean up
                     for f in [
                         "CHG",
@@ -278,12 +289,14 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
     if converged:
         return True
     else:
-        run_logger(f"Vibration calculation did not converge in {cwd}.", str(__file__), "error")
-        print(f"Vibration calculation did not converge in {cwd}.")
+        run_logger(
+            f"Vibration calculation did not converge in {cwd}.", str(__file__), "error"
+        )
+        print(f"Vibration calculation did not converge in {cwd}.", flush=True)
         raise ValueError(f"Vibration calculation did not converge in {cwd}.")
- 
 
-def main(**data: dict) -> tuple[bool, None]:
+
+def main(**data: dict) -> tuple[bool, dict]:
     """Run the vibration part of the workflow.
 
     Args:
@@ -295,9 +308,11 @@ def main(**data: dict) -> tuple[bool, None]:
     cwd = os.getcwd()
     vib_dir = Path(str(data["adsorbate"])) / "implicit" / "vibration"
     os.chdir(vib_dir)
-    master_database_dir = '/home/energy/rogle/asm_orr_rxn/master_databases'
-    if check_for_duplicates_sql(f"{master_database_dir}/e_ads_vib_corrections_master", data):
-        print('In master database already')
+    master_database_dir = "/home/energy/rogle/asm_orr_rxn/master_databases"
+    if check_for_duplicates_sql(
+        f"{master_database_dir}/e_ads_vib_corrections_master", data
+    ):
+        print("In master database already", flush=True)
         control_vibration = True
     else:
         control_vibration = calc_vibration(vib_dir, data)

@@ -2,17 +2,17 @@
 
 import os
 from pathlib import Path
+from typing import Optional  # type: ignore
 
 from ase.calculators.vasp import Vasp  # type: ignore
-from typing import Optional # type: ignore
 from ase.io import read  # type: ignore
 from utils import (  # type: ignore
+    check_database,
     check_electronic,
     check_ion,
+    magmons,
     read_and_write_database,
     run_logger,
-    magmons,
-    check_database
 )
 from vasp_input import vasp_input  # type: ignore
 
@@ -102,7 +102,7 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
     nelm = calc1.int_params["nelm"]
     control_electronic = check_electronic(nelm)
     if control_electronic == 0:
-        print("Error: electronic scf")
+        print("Error: electronic scf", flush=True)
         control_ion = 1
         err = 1
     else:
@@ -148,14 +148,14 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
         nelm = calc2.int_params["nelm"]
         control_electronic = check_electronic(nelm)
         if control_electronic == 0:
-            print("Error: electronic scf")
+            print("Error: electronic scf", flush=True)
             control_ion = 1
             err = 1
         else:
             """Check if a reasonable geometry"""
             control_geometry = check_geometry(cwd)
             if control_geometry == 0:
-                print("Error: structure disintegrates")
+                print("Error: structure disintegrates", flush=True)
                 control_ion = 1
                 err = 1
             else:
@@ -204,7 +204,7 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
         nelm = calc3.int_params["nelm"]
         control_electronic = check_electronic(nelm)  # check electronic scf
         if control_electronic == 0:
-            print("Error: electronic scf")
+            print("Error: electronic scf", flush=True)
             control_ion = 1
             err = 1
         else:
@@ -249,7 +249,7 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
             nelm = calc4.int_params["nelm"]
             control_electronic = check_electronic(nelm)  # check electronic scf
             if control_electronic == 0:
-                print("Error: electronic scf")
+                print("Error: electronic scf", flush=True)
                 control_ion = 1
                 err = 1
             else:
@@ -258,7 +258,7 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
                     cwd
                 )  # check matal-N and/or dopant-nb distance from CONTCAR
                 if control_geometry == 0:
-                    print("Error: structure disintegrates")
+                    print("Error: structure disintegrates", flush=True)
                     control_ion = 1
                     err = 1
                 else:
@@ -280,9 +280,7 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
                         converged = True
                         outcar = Path(cwd) / "OUTCAR.RDip"
                         if "implicit" in str(cwd):
-                            read_and_write_database(
-                                outcar, "pristine_implicit", data
-                            )
+                            read_and_write_database(outcar, "pristine_implicit", data)
                         elif "vac" in str(cwd):
                             read_and_write_database(outcar, "pristine_vac", data)
             # clean up
@@ -298,13 +296,15 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
                 os.system("rm %s" % f)
 
     if converged:
-        print("Relaxation is done")
+        print("Relaxation is done", flush=True)
         return True
     else:
         run_logger(
-            f"Adsorbate relaxation calculation did not converge in {cwd}.", str(__file__), "error"
+            f"Adsorbate relaxation calculation did not converge in {cwd}.",
+            str(__file__),
+            "error",
         )
-        print(f"Adsorbate relaxation calculation is not done in {cwd}")
+        print(f"Adsorbate relaxation calculation is not done in {cwd}", flush=True)
         raise ValueError(f"Adsorbate relaxation calculation is not done in {cwd}")
 
 
@@ -324,8 +324,9 @@ def main(**data: dict) -> tuple[bool, Optional[dict]]:
     copy_data = data.copy()
     controls = []
     del copy_data["pq_index"]
-    data["name"] = str(Path(data["run_structure"]).stem)
-    name = str(Path(data["run_structure"]).stem)
+    run_structure = str(data["run_structure"])
+    name = str(Path(run_structure).stem)
+    data["name"] = name  # type: ignore
     for directory in [vac_dir, implicit_dir]:
         os.chdir(directory)
         db_name = "pristine_implicit"
@@ -333,17 +334,15 @@ def main(**data: dict) -> tuple[bool, Optional[dict]]:
         cwd = os.getcwd()
         outcar = Path(cwd) / "OUTCAR.RDip"
         if check_database(db_name, copy_data, master=True):
-            print('In master database already', flush=True)
+            print("In master database already", flush=True)
             controls.append(True)
             break
         if os.path.exists("OUTCAR.RDip"):
-            print(f"OUTCAR.RDip exists in {cwd}")
+            print(f"OUTCAR.RDip exists in {cwd}", flush=True)
             if not check_database(db_name, copy_data, master=False):
-                print(f'Writing to local database for {name}', flush=True)
+                print(f"Writing to local database for {name}", flush=True)
                 if "implicit" in str(cwd):
-                    read_and_write_database(
-                        outcar, "pristine_implicit", copy_data
-                    )
+                    read_and_write_database(outcar, "pristine_implicit", copy_data)
                 elif "vac" in str(cwd):
                     read_and_write_database(outcar, "pristine_vac", copy_data)
             controls.append(True)

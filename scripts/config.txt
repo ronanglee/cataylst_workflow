@@ -1,0 +1,3 @@
+metals=Co,Pt
+delete_dirs=false
+node_config=1:1:xeon24el8_test:10m

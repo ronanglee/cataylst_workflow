@@ -1,15 +1,15 @@
 import os
 from pathlib import Path
+from typing import Optional
 
 from ase.db import connect  # type: ignore
 from ase.io import read  # type: ignore
-from typing import Optional
 from perqueue.constants import INDEX_KW  # type: ignore
 from utils import (  # type: ignore
+    check_database,
     read_and_write_database,
     run_logger,
     synthesis_stability_run_vasp,
-    check_database
 )
 from vasp_input import vasp_input  # type: ignore
 
@@ -37,16 +37,17 @@ def e_mxc(data: dict, vasp_parameters: dict) -> bool:
         )
     )
     outcar = Path(e_mxc_dir) / "OUTCAR.opt"
-    if os.path.exists(os.path.join(e_mxc_dir, 'OUTCAR.opt')):
-        print(f"e_mxc calculation already exists for {structure_name} in ", os.path.join(
-           e_mxc_dir, 'OUTCAR.opt'
-        ), flush=True)
+    if os.path.exists(os.path.join(e_mxc_dir, "OUTCAR.opt")):
+        print(
+            f"e_mxc calculation already exists for {structure_name} in ",
+            os.path.join(e_mxc_dir, "OUTCAR.opt"),
+        )
         if not check_database("e_mxc", data, master=False):
-            print(f'Writing to local database for {name}', flush=True)
+            print(f"Writing to local database for {name}", flush=True)
             read_and_write_database(outcar, "e_mxc", data)
         return True
     if check_database("e_mxc", data, master=True):
-        print('In master database already', flush=True)
+        print("In master database already", flush=True)
         return True
     e_mxc_dir.mkdir(parents=True, exist_ok=True)
     structure.write(e_mxc_dir / "init.POSCAR")
@@ -57,7 +58,11 @@ def e_mxc(data: dict, vasp_parameters: dict) -> bool:
         os.chdir(cwd)
         return True
     else:
-        run_logger(f"e_mxc calculation did not converge for {structure}.", str(__file__), "error")
+        run_logger(
+            f"e_mxc calculation did not converge for {structure}.",
+            str(__file__),
+            "error",
+        )
         print(f"e_mxc calculation did not converge for {structure}.", flush=True)
         os.chdir(cwd)
         raise ValueError(f"e_mxc calculation did not converge for {structure}.")
