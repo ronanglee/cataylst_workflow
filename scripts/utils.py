@@ -646,11 +646,15 @@ def read_config() -> dict:
     with open("config.txt", "r") as file:
         for line in file:
             line = line.strip()
+            if "metals" in line and "," not in line:
+                line += ","
             if not line or line.startswith("#"):
                 continue
             key, value = line.split("=", 1)
             if "," in value:
                 value = value.split(",")
+                if value[-1] == "":
+                    value = value[:-1]
             if isinstance(value, str):
                 if value.lower() in ["true", "false"]:
                     if value.lower() == "true":
