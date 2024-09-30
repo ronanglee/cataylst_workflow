@@ -7,6 +7,7 @@ from itertools import combinations
 from pathlib import Path
 
 import numpy as np  # type: ignore
+import yaml  # type: ignore
 from ase.build import add_adsorbate  # type: ignore
 from ase.calculators.vasp import Vasp  # type: ignore
 from ase.db import connect  # type: ignore
@@ -112,7 +113,6 @@ def synthesis_stability_run_vasp(
         print("Error: electronic scf", flush=True)
         control_ion = 1
     else:
-        """Check if force converged"""
         ext = "SP"
         for f in [
             "OSZICAR",
@@ -139,14 +139,12 @@ def synthesis_stability_run_vasp(
         calc = Vasp(**paramscopy)
         atoms.set_calculator(calc)
         atoms.get_potential_energy()
-        """Check if a vasp calculation (eletronic self consistance) is converged"""
         nelm = calc.int_params["nelm"]
         control_electronic = check_electronic(nelm)
         if control_electronic == 0:
             print("Error: electronic scf", flush=True)
             control_ion = 1
         else:
-            """Check if force converged"""
             nsw = calc.int_params["nsw"]
             control_ion = check_ion(nsw)
             if control_ion == 1:
@@ -161,7 +159,6 @@ def synthesis_stability_run_vasp(
                     "OUTCAR",
                 ]:
                     os.system(f"cp {f} {f}.{ext}")
-                # Clean up
                 for f in [
                     "CHG",
                     "CHGCAR",
@@ -234,11 +231,12 @@ def operating_stability_run_vasp(
                 os.path.join(data_base_folder, "e_xch_vib_solv_implicit_corrections"),
                 database,
             )
-            return True
+        return True
     if not os.path.exists("OUTCAR.RDip"):
         # static calculation always at the beginning
-        vasp_parameters["istart"] = 0  # strart from being from scratch
-        vasp_parameters["icharg"] = 2  # take superposition of atomic charge density
+        vasp_parameters["istart"] = 0
+        # take superposition of atomic charge density
+        vasp_parameters["icharg"] = 2
         vasp_parameters["nsw"] = 0
         vasp_parameters["lcharg"] = True
         vasp_parameters["lwave"] = False
@@ -247,7 +245,6 @@ def operating_stability_run_vasp(
         calc1 = Vasp(**paramscopy)
         atoms.set_calculator(calc1)
         atoms.get_potential_energy()
-        """Check if a vasp calculation (electronic self consistance) is converged"""
         nelm = calc1.int_params["nelm"]
         control_electronic = check_electronic(nelm)
         if control_electronic == 0:
@@ -270,8 +267,10 @@ def operating_stability_run_vasp(
         for atom in atoms:
             if atom.symbol in mag.keys():
                 atom.magmom = mag[atom.symbol]
-        vasp_parameters["istart"] = 0  # not to read WAVECAR
-        vasp_parameters["icharg"] = 1  # restrat from CHGCAR
+        # not to read WAVECAR
+        vasp_parameters["istart"] = 0
+        # restart from CHGCAR
+        vasp_parameters["icharg"] = 1
         vasp_parameters["ldipol"] = True
         vasp_parameters["idipol"] = 3
         vasp_parameters["dipol"] = atoms.get_center_of_mass(scaled=True)
@@ -289,14 +288,12 @@ def operating_stability_run_vasp(
         calc2 = Vasp(**paramscopy)
         atoms.set_calculator(calc2)
         atoms.get_potential_energy()
-        """Check if a vasp calculation is converged"""
         nelm = calc2.int_params["nelm"]
         control_electronic = check_electronic(nelm)
         if control_electronic == 0:
             print("Error: electronic scf", flush=True)
             control_ion = 1
         else:
-            """Check if force converged"""
             nsw = calc2.int_params["nsw"]
             control_ion = check_ion(nsw)
             ext = "preRDip"
@@ -321,7 +318,8 @@ def operating_stability_run_vasp(
         for atom in atoms:
             if atom.symbol in mag.keys():
                 atom.magmom = mag[atom.symbol]
-        vasp_parameters["istart"] = 1  # start from WAVECAR in vaccum
+        # start from WAVECAR in vaccum
+        vasp_parameters["istart"] = 1
         vasp_parameters["nsw"] = 500
         vasp_parameters["ldipol"] = True
         vasp_parameters["idipol"] = 3
@@ -335,14 +333,12 @@ def operating_stability_run_vasp(
         calc4 = Vasp(**paramscopy)
         atoms.set_calculator(calc4)
         atoms.get_potential_energy()
-        """Check if a vasp electronic calculation is converged"""
         nelm = calc4.int_params["nelm"]
         control_electronic = check_electronic(nelm)  # check electronic scf
         if control_electronic == 0:
             print("Error: electronic scf", flush=True)
             control_ion = 1
         else:
-            """Check if force converged"""
             nsw = calc4.int_params["nsw"]
             control_ion = check_ion(nsw)
             if control_ion == 1:
@@ -378,9 +374,8 @@ def operating_stability_run_vasp(
             calc = Vasp(**paramscopy)
             atoms.set_calculator(calc)
             atoms.get_potential_energy()
-            """Check if a vasp electronic calculation is converged"""
             nelm = calc.int_params["nelm"]
-            control_electronic = check_electronic(nelm)  # check electronic scf
+            control_electronic = check_electronic(nelm)
             if control_electronic == 0:
                 print("Error: electronic scf", flush=True)
             else:
@@ -401,9 +396,8 @@ def operating_stability_run_vasp(
                     init_poscar = read(
                         os.path.join(data["run_structure"], "init.POSCAR")
                     )
-                    indices = [atom.index for atom in init_poscar][
-                        :-1
-                    ]  # exclude the metal atom
+                    # exclude the metal atom
+                    indices = [atom.index for atom in init_poscar][:-1]
                     current_indices = [atom.index for atom in atoms]
                     len_vib = len(current_indices) - len(indices)
                     adsorbate_id = get_adsorbateid(Path("init.POSCAR"), len_vib)
@@ -411,7 +405,18 @@ def operating_stability_run_vasp(
                     vib = Vibrations(
                         atoms, indices=vibindices, name="vib", delta=0.01, nfree=2
                     )
-                    vib.run()
+                    # workaround for ASE error creating empty vibration json file(s)
+                    try:
+                        vib.run()
+                    except TypeError:
+                        cwd = os.getcwd()
+                        vib_dir = Path(cwd) / "vib"
+                        for filename in os.listdir(vib_dir):
+                            file_path = os.path.join(vib_dir, filename)
+                            if os.path.isfile(file_path):
+                                if os.path.getsize(file_path) == 0:
+                                    os.remove(file_path)
+                        vib.run()
                     vib.get_energies()
                     vib.summary(log="vibration.txt")
                     for i in range(3 * len(vibindices)):
@@ -485,6 +490,7 @@ def check_for_duplicates_sql(save_file: str, data: dict, master: bool) -> bool:
     Returns:
         bool: True if the data is already in the database, False otherwise.
     """
+    name = None
     config = read_config()
     if master:
         data_base_folder = config["master_database_dir"]
@@ -499,6 +505,8 @@ def check_for_duplicates_sql(save_file: str, data: dict, master: bool) -> bool:
     for table in tables:
         name = table[0]
         break
+    if name is None:
+        return False
     cursor.execute(f"SELECT * FROM {name}")
 
     result = [row[1] for row in cursor.fetchall()]
@@ -548,7 +556,7 @@ def gather_structs(data: dict, metals: list) -> dict:
        metals (list): List of metals.
 
     Returns:
-       workflow_data: Dictionary containing the run structure, base directory and metal.
+       workflow_data (dict): Dictionary containing the run structure, base directory and metal.
     """
     workflow_data = {}
     run_structures = data["all_run_structures"]
@@ -595,24 +603,24 @@ def get_vibrational_correction() -> float:
     """Calculate vibrational correction.
 
     Returns:
-        float: Vibrational correction.
+        correction (float): Vibrational correction.
     """
     kt = 0.02568
     rt = 298.15
-    vib_file = open("vibration.txt")
     zpe_tot = 0
     u_tot = 0
     ts_tot = 0
-    for line in vib_file:
-        pattern = re.compile(r"\s*(\d+)\s+(?P<energy>\d+\.\d+)\s+(\d+\.\d+)\s*")
-        match = pattern.match(line)
-        if match:
-            finder = pattern.search(line)
-            e = float(finder.groupdict()["energy"]) / 1000  # type: ignore
-            u = e / (np.exp(e / kt) - 1)
-            zpe_tot += 0.5 * e  # type: ignore
-            u_tot += e / (np.exp(e / kt) - 1)
-            ts_tot += rt * (kt / rt) * (u / kt - np.log(1 - np.exp(-e / kt)))
+    with open("vibration.txt", "r") as vib_file:
+        for line in vib_file:
+            pattern = re.compile(r"\s*(\d+)\s+(?P<energy>\d+\.\d+)\s+(\d+\.\d+)\s*")
+            match = pattern.match(line)
+            if match:
+                finder = pattern.search(line)
+                e = float(finder.groupdict()["energy"]) / 1000  # type: ignore
+                u = e / (np.exp(e / kt) - 1)
+                zpe_tot += 0.5 * e  # type: ignore
+                u_tot += e / (np.exp(e / kt) - 1)
+                ts_tot += rt * (kt / rt) * (u / kt - np.log(1 - np.exp(-e / kt)))
     correction = zpe_tot + u_tot - ts_tot
     return correction
 
@@ -636,32 +644,14 @@ def read_and_write_database(outcar: os.PathLike, database: str, data: dict) -> N
 
 
 def read_config() -> dict:
-    """Reads the configuration file.
+    """Reads the user input configuration file.
 
     Returns:
         config_dict (dict): Configuration file as dictionary.
     """
-    config_dict = {}
-    value: list | bool | str = ""
-    with open("config.txt", "r") as file:
-        for line in file:
-            line = line.strip()
-            if "metals" in line and "," not in line:
-                line += ","
-            if not line or line.startswith("#"):
-                continue
-            key, value = line.split("=", 1)
-            if "," in value:
-                value = value.split(",")
-                if value[-1] == "":
-                    value = value[:-1]
-            if isinstance(value, str):
-                if value.lower() in ["true", "false"]:
-                    if value.lower() == "true":
-                        value = True
-                    else:
-                        value = False
-            config_dict[key.strip()] = value
+    base_dir = Path(__file__).parent
+    with open(base_dir / "config.yaml") as f:
+        config_dict = yaml.safe_load(f)
     return config_dict
 
 
@@ -679,14 +669,15 @@ def check_ase_database(database: str, data: dict, master: bool) -> bool:
     config = read_config()
     if master:
         database_dir = config["master_database_dir"]
-        db = connect(database_dir / f"{database}_master.db")
+        db = connect(Path(database_dir) / f"{database}_master.db")
     else:
-        data_base_folder = Path(data["base_dir"]) / "runs" / "databases"
-        db = connect(data_base_folder / f"{database}.db")
+        database_dir = Path(data["base_dir"]) / "runs" / "databases"
+        db = connect(Path(database_dir) / f"{database}.db")
     check_duplicates = []
     for i in db.select(name=data["name"]):
         check_duplicates.append(i)
     if len(check_duplicates) == 1:
+        print(f"{database} database already contains the data.", flush=True)
         return True
     else:
         return False

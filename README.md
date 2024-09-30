@@ -1,5 +1,6 @@
 # Pre-commit
 
+End of e_final commented out
 subject to change
 Pre-commit is used for linting, type-checking etc.,
 

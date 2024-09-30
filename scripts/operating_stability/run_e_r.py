@@ -4,12 +4,9 @@ import os
 from pathlib import Path  # type: ignore
 
 import numpy as np  # type: ignore
+from activity_selectivity.merge_databases import merge  # type: ignore
 from ase.db import connect  # type: ignore
-from utils import (  # type: ignore
-    read_and_write_database,
-    retreive_sql_correction,
-    run_logger,
-)
+from utils import read_config, retreive_sql_correction, run_logger  # type: ignore
 
 # constant
 kb = 8.617e-5  # Boltzmann constant in eV/K
@@ -26,6 +23,8 @@ database_dir = Path(__file__).parent.parent.parent / "runs" / "databases"
 
 ph = 0
 u = 0.7
+
+config = read_config()
 
 
 def acid_stability(
@@ -709,6 +708,44 @@ def acid_stability(
     return b_rel, ooh_rel
 
 
+def get_master(data: dict) -> list:
+    """Get the master xch database object and remaining energies from databases.
+
+    Args:
+        data (dict): Dictionary containing the data for the calculation.
+
+    Returns:
+        list: List of ASE database objects.
+    """
+    master_dir = Path(config["master_database_dir"])
+    structure = data["name"]
+    run_struc = data["run_structure"]
+    metal = data["metal"]
+    carbon_structure = data["carbon_structure"]
+    db_names = [
+        "e_xch_solv_implicit_without_corrections",
+        "e_xc_solv_implicit",
+        "pristine_implicit",
+        "e_adsorbate_without_corrections",
+    ]
+    mname = str(Path(run_struc).stem).replace(metal, "M")  # type: ignore
+
+    xch_db = connect(master_dir / f"{db_names[0]}_master.db")
+
+    xc_db = connect(master_dir / f"{db_names[1]}_master.db")
+    e_xc = xc_db.get(name=mname).energy
+
+    pristine_implicit = connect(master_dir / f"{db_names[2]}_master.db")
+    e_mn4 = pristine_implicit.get(
+        name=structure, metal=metal, carbon_structure=carbon_structure
+    ).energy
+
+    adsorption_db = connect(master_dir / f"{db_names[3]}_master.db")
+    e_mn4_ooh = adsorption_db.get(name=structure, ads1="non", ads2="OOH").energy
+
+    return [xch_db, e_xc, e_mn4, e_mn4_ooh]
+
+
 def main(**data: dict) -> tuple[bool, dict | None]:
     """Calculate the relative stability of the OOH intermediate.
 
@@ -720,37 +757,34 @@ def main(**data: dict) -> tuple[bool, dict | None]:
     """
     carbon_structure = data["carbon_structure"]
     metal = str(data["metal"])
-    xch_db = connect(database_dir / "e_xch_solv_implicit_without_corrections.db")
-    xc_db = connect(database_dir / "e_xc_solv_implicit.db")
-    pristine_implicit = connect(database_dir / "pristine_implicit.db")
-    adsorption_db = connect(database_dir / "e_adsorbate_without_corrections.db")
+    base_dir = Path(str(data["base_dir"]))
+    database_dir = Path(base_dir) / "runs" / "databases"
+    master_dir = Path(config["master_database_dir"])
+    merge(database_dir, master_dir)
+    run_list = get_master(data)
+    xch_db, e_xc, e_mn4, e_mn4_ooh = run_list
     run_struc = data["run_structure"]  # type: ignore
     structure = data["name"]
     dopant = data["dopant"]
     name = str(Path(run_struc).stem).replace(metal, "M")  # type: ignore
-    try:
-        e_xc = xc_db.get(name=name).energy
-    except KeyError:
-        basee = (
-            "/home/energy/rogle/asm_orr_rxn/catalyst_workflow/runs/operating_stability/e_xc_solv_implicit/"
-            + name
-        )
-        outcar = Path(basee) / "OUTCAR.RDip"
-        copy_data = data.copy()
-        del copy_data["pq_index"]
-        del copy_data["metal"]
-        copy_data["name"] = name  # type: ignore
-        read_and_write_database(outcar, "e_xc_solv_implicit", copy_data)
-        e_xc = xc_db.get(name=name).energy
     h_master = {"0H": e_xc}
     for hs in range(1, 5):
         find_config_min = []
         # for conf in range(1, 5):
         for row in xch_db.select(carbon_structure=carbon_structure):
-            xch_correction = retreive_sql_correction(
-                os.path.join(database_dir, "e_xch_vib_solv_implicit_corrections"),
-                {"name": f"{name}_{hs}H_config1"},
-            )
+            try:
+                xch_correction = retreive_sql_correction(
+                    os.path.join(database_dir, "e_xch_vib_solv_implicit_corrections"),
+                    {"name": f"{name}_{hs}H_config1"},
+                )
+            except NameError:
+                xch_correction = retreive_sql_correction(
+                    os.path.join(
+                        master_dir, "e_xch_vib_solv_implicit_corrections_master"
+                    ),
+                    {"name": f"{name}_{hs}H_config1"},
+                )
+
             if xch_correction is not None:
                 corrected_energy = row.energy + float(xch_correction)
                 find_config_min.append(corrected_energy)
@@ -772,18 +806,15 @@ def main(**data: dict) -> tuple[bool, dict | None]:
         raise ValueError(f"Could not find any 1H configurations for {name}")
     thermal_ooh = float(
         retreive_sql_correction(
-            os.path.join(database_dir, "e_ads_vib_corrections"), data
+            os.path.join(database_dir, "e_ads_vib_corrections_master"), data
         )
     )
-    e_mn4_ooh = adsorption_db.get(name=structure, ads1="non", ads2="OOH").energy
-    e_mn4 = pristine_implicit.get(
-        name=structure, metal=metal, carbon_structure=carbon_structure
-    ).energy
     e_mn4_ooh_corr = (
         e_mn4_ooh + thermal_ooh + 0.2
     )  # 0.2 eV correction for the Christensen correction
     b_rel, ooh_rel = acid_stability(ph, u, metal, e_mn4, h_master, e_mn4_ooh_corr)
     cutoff = 1.5
+    print(f"b_rel: {b_rel}, ooh_rel: {ooh_rel}", flush=True)
     if b_rel < cutoff:
         return True, data
     else:

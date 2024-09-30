@@ -273,7 +273,7 @@ def check_geometry(cwd: os.PathLike, adsorbate_id: list) -> int:
     )
     rxy = math.sqrt(dx * dx + dy * dy)
 
-    """ 1. check adsorbate """
+    # 1. check adsorbate
     if rxy > 1.5:
         print(
             "The adsorbate shifts from adsorption site (xy > 1.5 Angstrom)", flush=True
@@ -283,7 +283,7 @@ def check_geometry(cwd: os.PathLike, adsorbate_id: list) -> int:
         print("The adsorbate deadsorps (z > 3.5 Angstrom)", flush=True)
         control = 0
 
-    """ 2. check if the adsorbate dissociate """
+    # 2. check if the adsorbate dissociate
     if ads2 == "OOH":
         n = symbol.count("O")
         if n == 2:
@@ -302,7 +302,7 @@ def check_geometry(cwd: os.PathLike, adsorbate_id: list) -> int:
                 print("The adsorbate dissociates", flush=True)
                 control = 0
 
-    """ 3. check metal atom """
+    # 3. check metal atom
     carbons = []
     for atom in system:
         if atom.symbol == "C":
@@ -341,9 +341,10 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
     calc = Vasp(**paramscopy)
     converged = False
     qstep = 1
+    control_geometry = 1
     if solvation == "implicit":
         qstep = 2
-    print("#vasp calculation = %d" % qstep, flush=True)
+    print(f"#vasp calculation = {qstep}", flush=True)
     err = 0
     for ii in range(qstep):
         if ii == 0:
@@ -354,8 +355,9 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
                 if atom.symbol in mag.keys():
                     atom.magmom = mag[atom.symbol]
             # static calculation always at the beginning
-            params["istart"] = 0  # strart from being from scratch
-            params["icharg"] = 2  # take superposition of atomic charge density
+            params["istart"] = 0
+            # take superposition of atomic charge density
+            params["icharg"] = 2
             params["nsw"] = 0
             params["lcharg"] = True
             params["lwave"] = False
@@ -364,9 +366,8 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
             paramscopy = params.copy()
             calc1 = Vasp(**paramscopy)
             atoms.set_calculator(calc1)
-            print("(%d) static calculation" % ii, flush=True)
+            print(f"({ii}) static calculation", flush=True)
             atoms.get_potential_energy()
-            """Check if a vasp calculation (electronic self consistance) is converged"""
             nelm = calc1.int_params["nelm"]
             control_electronic = check_electronic(nelm)
             if control_electronic == 0:
@@ -402,8 +403,10 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
             for atom in atoms:
                 if atom.symbol in mag.keys():
                     atom.magmom = mag[atom.symbol]
-            params["istart"] = 0  # not to read WAVECAR
-            params["icharg"] = 1  # restart from CHGCAR
+            # not to read WAVECAR
+            params["istart"] = 0
+            # restart from CHGCAR
+            params["icharg"] = 1
             params["ldipol"] = True
             params["idipol"] = 3
             params["dipol"] = atoms.get_center_of_mass(scaled=True)
@@ -421,9 +424,8 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
             paramscopy = params.copy()
             calc2 = Vasp(**paramscopy)
             atoms.set_calculator(calc2)
-            print("(%d) optimization calculation" % ii, flush=True)
+            print(f"({ii}) optimization calculation", flush=True)
             atoms.get_potential_energy()
-            """Check if a vasp calculation is converged"""
             nelm = calc2.int_params["nelm"]
             control_electronic = check_electronic(nelm)
             if control_electronic == 0:
@@ -431,13 +433,12 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
                 control_ion = 1
                 err = 1
             else:
-                control_geometry = check_geometry(cwd, adsorbate_id)
+                # control_geometry = check_geometry(cwd, adsorbate_id)
                 if control_geometry == 0:
                     print("Error: structure disintegrates", flush=True)
                     control_ion = 1
                     err = 1
                 else:
-                    """Check if force converged"""
                     nsw = calc2.int_params["nsw"]
                     control_ion = check_ion(nsw)
                     if control_ion == 1:
@@ -455,7 +456,6 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
                             "vasp.out",
                         ]:
                             os.system("cp %s %s.%s" % (f, f, ext))
-            # clean up
             for f in ["DOSCAR", "EIGENVAL", "PROCAR", "vasprun.xml"]:
                 os.system("rm %s" % f)
         if ii == 1 and err == 0:
@@ -467,7 +467,7 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
             for atom in atoms:
                 if atom.symbol in mag.keys():
                     atom.magmom = mag[atom.symbol]
-            params["istart"] = 1  # start from WAVECAR in vaccum
+            params["istart"] = 1
             params["nsw"] = 500
             params["ldipol"] = True
             params["idipol"] = 3
@@ -482,9 +482,7 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
             paramscopy = params.copy()
             calc4 = Vasp(**paramscopy)
             atoms.set_calculator(calc4)
-            print("(%d) optimization calculation" % ii, flush=True)
             atoms.get_potential_energy()
-            """Check if a vasp electronic calculation is converged"""
             nelm = calc4.int_params["nelm"]
             control_electronic = check_electronic(nelm)  # check electronic scf
             if control_electronic == 0:
@@ -492,14 +490,12 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
                 control_ion = 1
                 err = 1
             else:
-                """Check if a vasp ion calculation is converged"""
-                control_geometry = check_geometry(cwd, adsorbate_id)
+                # control_geometry = check_geometry(cwd, adsorbate_id)
                 if control_geometry == 0:
                     print("Error: structure disintegrates", flush=True)
                     control_ion = 1
                     err = 1
                 else:
-                    """Check if force converged"""
                     nsw = calc4.int_params["nsw"]
                     control_ion = check_ion(nsw)
                     if control_ion == 1:
@@ -536,7 +532,7 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
         return True
     else:
         run_logger(
-            f"Adsorbate relaxation calculation is not converged in {cwd}.",
+            f"Adsorbate relaxation calculation is not converged in {cwd}. Check perqueue.out file for more details.",
             str(__file__),
             "error",
         )

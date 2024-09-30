@@ -32,7 +32,7 @@ def e_xch(data: dict, vasp_parameters: dict) -> bool:
             flush=True,
         )
         if check_for_duplicates_sql(
-            "e_xch_vib_solv_implicit_corrections_master", data, master=True
+            "e_xch_vib_solv_implicit_corrections", data, master=True
         ):
             print(
                 "In master e_xch_vib_solv_implicit_corrections database already",

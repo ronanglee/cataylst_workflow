@@ -1,15 +1,16 @@
-import json
 import os
 from pathlib import Path  # type: ignore
 
 from ase.db import connect  # type: ignore
-from utils import run_logger  # type: ignore
+from utils import read_config, retreive_sql_correction, run_logger  # type: ignore
 
 g_h2 = -7.18 + 0.09  # eV/molecule (Free energy + BEEF correction)
 g_h2o = -12.81 + (-0.03)  # eV/molecule (Free energy + BEEF correction)
 dg_h2o = -4.92
 
 database_dir = Path(__file__).parent.parent.parent / "runs" / "databases"
+
+config = read_config()
 
 
 def gibbs_ooh(g_ooh: float, g_bare: float, thermal_ooh: float) -> float:
@@ -36,18 +37,20 @@ def main(**data: dict) -> tuple[bool, dict | None]:
     Returns:
         Perqueue return tuple
     """
+    master_dir = Path(config["master_database_dir"])
     metal = data["metal"]
     carbon_structure = data["carbon_structure"]
     dopant = data["dopant"]
-    adsorption_db = connect(database_dir / "e_adsorbate_without_corrections.db")
-    pristine_db = connect(database_dir / "pristine_implicit.db")
-    thermal_corrections = json.load(
-        open(os.path.join(database_dir, "e_ads_vib_corrections.json"))
+    adsorption_db = connect(master_dir / "e_adsorbate_without_corrections_master.db")
+    pristine_db = connect(master_dir / "pristine_implicit_master.db")
+    thermal_ooh = float(
+        retreive_sql_correction(
+            os.path.join(master_dir, "e_ads_vib_corrections_master"), data
+        )
     )
     structure = str(Path(data["run_structure"]).stem)  # type: ignore
     g_ooh = adsorption_db.get(name=structure, ads1="non", ads2="OOH").energy
     g_bare = pristine_db.get(name=structure).energy
-    thermal_ooh = thermal_corrections[structure]["correction"]
     delta_g1 = gibbs_ooh(g_ooh, g_bare, thermal_ooh) + dg_h2o
     # 4.92 dg_h2o, d_g (delta_g) 1.4 h2o2 to water
     delta_g2 = (4.92 - 1.4) - gibbs_ooh(g_ooh, g_bare, thermal_ooh)

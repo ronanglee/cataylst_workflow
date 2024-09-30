@@ -98,8 +98,8 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
             if atom.symbol in mag.keys():
                 atom.magmom = mag[atom.symbol]
         # static calculation always at the beginning
-        params["istart"] = 0  # strart from being from scratch
-        params["icharg"] = 2  # take superposition of atomic charge density
+        params["istart"] = 0
+        params["icharg"] = 2
         params["nsw"] = 0
         params["lcharg"] = True
         params["lwave"] = False
@@ -110,7 +110,6 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
         atoms.set_calculator(calc1)
         print("static calculation", flush=True)
         atoms.get_potential_energy()
-        """Check if a vasp calculation (electronic self consistance) is converged"""
         nelm = calc1.int_params["nelm"]
         control_electronic = check_electronic(nelm)
         if control_electronic == 0:
@@ -134,8 +133,8 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
             for atom in atoms:
                 if atom.symbol in mag.keys():
                     atom.magmom = mag[atom.symbol]
-            params["istart"] = 0  # not to read WAVECAR
-            params["icharg"] = 1  # restrat from CHGCAR
+            params["istart"] = 0
+            params["icharg"] = 1
             params["ldipol"] = True
             params["idipol"] = 3
             params["dipol"] = atoms.get_center_of_mass(scaled=True)
@@ -149,9 +148,8 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
             atoms.set_calculator(calc2)
             print("dipole calculation", flush=True)
             atoms.get_potential_energy()
-            """Check if a vasp calculation is converged"""
             nelm = calc2.int_params["nelm"]
-            control_electronic = check_electronic(nelm)  # check electronic scf
+            control_electronic = check_electronic(nelm)
             if control_electronic == 0:
                 print("Error: electronic scf", flush=True)
                 err = 1
@@ -171,7 +169,6 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
                 for atom in atoms:
                     if atom.symbol in mag.keys():
                         atom.magmom = mag[atom.symbol]
-                # dipole calculation + solvation
                 os.system("cp WAVECAR.preRDip WAVECAR")
                 params["istart"] = 1
                 params["nsw"] = 9999
@@ -189,7 +186,6 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
                 atoms.set_calculator(calc4)
                 print("dipole correction calculation", flush=True)
                 atoms.get_potential_energy()
-                """Check if a vasp electronic calculation is converged"""
                 nelm = calc4.int_params["nelm"]
                 control_electronic = check_electronic(nelm)  # check electronic scf
                 if control_electronic == 0:
@@ -234,9 +230,8 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
             calc7 = Vasp(**paramscopy)
             atoms.set_calculator(calc7)
             atoms.get_potential_energy()
-            """Check if a vasp electronic calculation is converged"""
             nelm = calc7.int_params["nelm"]
-            control_electronic = check_electronic(nelm)  # check electronic scf
+            control_electronic = check_electronic(nelm)
             if control_electronic == 0:
                 print("Error: electronic scf", flush=True)
                 err = 1
@@ -264,7 +259,16 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
                     vib = Vibrations(
                         atoms, indices=vibindices, name="vib", delta=0.01, nfree=2
                     )
-                    vib.run()
+                    try:
+                        vib.run()
+                    except TypeError:
+                        vib_dir = Path(os.getcwd()) / "vib"
+                        for filename in os.listdir(vib_dir):
+                            file_path = os.path.join(vib_dir, filename)
+                            if os.path.isfile(file_path):
+                                if os.path.getsize(file_path) == 0:
+                                    os.remove(file_path)
+                        vib.run()
                     vib.get_energies()
                     vib.summary(log="vibration.txt")
                     for i in range(3 * len(vibindices)):
@@ -275,7 +279,6 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
                         os.path.join(data_base_folder, "e_ads_vib_corrections"),
                         [list(database.keys())[0], list(database.values())[0]],
                     )
-                    # clean up
                     for f in [
                         "CHG",
                         "CHGCAR",
@@ -309,7 +312,7 @@ def main(**data: dict) -> tuple[bool, dict]:
     cwd = os.getcwd()
     vib_dir = Path(str(data["adsorbate"])) / "implicit" / "vibration"
     os.chdir(vib_dir)
-    if check_for_duplicates_sql("e_ads_vib_corrections_master", data, master=True):
+    if check_for_duplicates_sql("e_ads_vib_corrections", data, master=True):
         print("In master database already", flush=True)
         control_vibration = True
     else:

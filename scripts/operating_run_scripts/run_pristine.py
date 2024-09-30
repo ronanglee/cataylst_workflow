@@ -38,8 +38,6 @@ def check_geometry(cwd: os.PathLike) -> int:
     metal = folders[n + 2]
     carbons = []
     atoms = read("CONTCAR")
-
-    # check the metal site
     for atom in atoms:
         if atom.symbol == "C":
             carbons.append(atom.z)
@@ -75,7 +73,6 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
     params = vasp_input()
     paramscopy = params.copy()
     calc = Vasp(**paramscopy)
-    # start the vasp calculations
     err = 0
     control_ion = 0
     converged = False
@@ -85,10 +82,8 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
         if atom.symbol in mag.keys():
             atom.magmom = mag[atom.symbol]
     # static calculation always at the beginning
-    params["istart"] = (
-        0  # strart from being from scratch (ISTART determins whether or not to read the WAVECAR file)
-    )
-    params["icharg"] = 2  # take superposition of atomic charge density
+    params["istart"] = 0
+    params["icharg"] = 2
     params["nsw"] = 0
     params["lcharg"] = True
     params["lwave"] = False
@@ -98,7 +93,6 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
     calc1 = Vasp(**paramscopy)
     atoms.set_calculator(calc1)
     atoms.get_potential_energy()
-    """Check if a vasp calculation (electronic self consistance) is converged"""
     nelm = calc1.int_params["nelm"]
     control_electronic = check_electronic(nelm)
     if control_electronic == 0:
@@ -144,7 +138,6 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
         calc2 = Vasp(**paramscopy)
         atoms.set_calculator(calc2)
         atoms.get_potential_energy()
-        """Check if a vasp calculation (eletronic self consistance) is converged"""
         nelm = calc2.int_params["nelm"]
         control_electronic = check_electronic(nelm)
         if control_electronic == 0:
@@ -152,7 +145,6 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
             control_ion = 1
             err = 1
         else:
-            """Check if a reasonable geometry"""
             control_geometry = check_geometry(cwd)
             if control_geometry == 0:
                 print("Error: structure disintegrates", flush=True)
@@ -170,7 +162,6 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
                     "vasp.out",
                 ]:
                     os.system("cp %s %s.%s" % (f, f, ext))
-        # clean up
         for f in ["DOSCAR", "EIGENVAL", "PROCAR", "vasprun.xml"]:
             os.system("rm %s" % f)
     if err == 0:
@@ -186,21 +177,18 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
         params["ldipol"] = False
         if solvation == "implicit":
             os.system("cp WAVECAR.preRDip WAVECAR")
-            params["istart"] = 1  # start from WAVECAR
+            params["istart"] = 1
             params["lwave"] = True
             params["lsol"] = True
             params["eb_k"] = 80
         else:
-            params["istart"] = (
-                0  # start from being from scratch (ISTART determins whether or not to read the WAVECAR file)
-            )
+            params["istart"] = 0
             params["lwave"] = False
         calc3 = calc
         paramscopy = params.copy()
         calc3 = Vasp(**paramscopy)
         atoms.set_calculator(calc3)
         atoms.get_potential_energy()
-        """Check if a vasp electronic calculation is converged"""
         nelm = calc3.int_params["nelm"]
         control_electronic = check_electronic(nelm)  # check electronic scf
         if control_electronic == 0:
@@ -245,7 +233,6 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
             calc4 = Vasp(**paramscopy)
             atoms.set_calculator(calc4)
             atoms.get_potential_energy()
-            """Check if a vasp electronic calculation is converged"""
             nelm = calc4.int_params["nelm"]
             control_electronic = check_electronic(nelm)  # check electronic scf
             if control_electronic == 0:
@@ -253,16 +240,12 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
                 control_ion = 1
                 err = 1
             else:
-                """Check if a vasp ion calculation is converged"""
-                control_geometry = check_geometry(
-                    cwd
-                )  # check matal-N and/or dopant-nb distance from CONTCAR
+                control_geometry = check_geometry(cwd)
                 if control_geometry == 0:
                     print("Error: structure disintegrates", flush=True)
                     control_ion = 1
                     err = 1
                 else:
-                    """Check if force converged"""
                     nsw = calc4.int_params["nsw"]
                     control_ion = check_ion(nsw)
                     if control_ion == 1:
@@ -341,9 +324,13 @@ def main(**data: dict) -> tuple[bool, Optional[dict]]:
             print(f"OUTCAR.RDip exists in {cwd}", flush=True)
             if not check_ase_database(db_name, copy_data, master=False):
                 print(f"Writing to local database for {name}", flush=True)
-                if "implicit" in str(cwd):
+                if "implicit" in str(cwd) and not check_ase_database(
+                    "pristine_implicit", copy_data, master=False
+                ):
                     read_and_write_database(outcar, "pristine_implicit", copy_data)
-                elif "vac" in str(cwd):
+                elif "vac" in str(cwd) and not check_ase_database(
+                    "pristine_vac", copy_data, master=False
+                ):
                     read_and_write_database(outcar, "pristine_vac", copy_data)
             controls.append(True)
         else:
