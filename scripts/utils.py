@@ -644,7 +644,7 @@ def read_and_write_database(outcar: os.PathLike, database: str, data: dict) -> N
 
 
 def read_config() -> dict:
-    """Reads the user input configuration file.
+    """Reads the user input configuration YAML file.
 
     Returns:
         config_dict (dict): Configuration file as dictionary.
@@ -652,6 +652,11 @@ def read_config() -> dict:
     base_dir = Path(__file__).parent
     with open(base_dir / "config.yaml") as f:
         config_dict = yaml.safe_load(f)
+    if not isinstance(config_dict["metals"], list):
+        config_dict["metals"] = [config_dict["metals"]]
+    for key in config_dict.keys():
+        if "#" in key:
+            del config_dict[key]
     return config_dict
 
 

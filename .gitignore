@@ -7,3 +7,4 @@ __pycache__/
 perqueue*
 scripts/workflow.log
 run_structures/*
+.nfs*

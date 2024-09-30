@@ -30,6 +30,10 @@ def generate_input_files(metals: list, base_dir: os.PathLike) -> tuple[list, set
         str(Path(base_dir) / "template_structures" / "run_structures") + "/Pt*/POSCAR*"
     )
     template_structures = [read(f) for f in template_files]
+    if template_structures == []:
+        raise FileNotFoundError(
+            "No files found. Need to have template files in the template_structures/run_structures folder."
+        )
     run_folder = Path(base_dir) / "runs" / "structures"
     run_folder.mkdir(exist_ok=True)
     run_structures = []
@@ -38,6 +42,7 @@ def generate_input_files(metals: list, base_dir: os.PathLike) -> tuple[list, set
             copy_structure = structure.copy()
             for atom in copy_structure:
                 if atom.symbol == "Pt":
+                    print(atom.symbol, metal)
                     atom.symbol = metal
                 if (
                     atom.symbol not in ["N", "C", "H"]
@@ -63,6 +68,7 @@ def generate_input_files(metals: list, base_dir: os.PathLike) -> tuple[list, set
 
 
 config = read_config()
+print(config)
 base_dir = Path(__file__).parent.parent
 
 # Perqueue needs files not imported functions

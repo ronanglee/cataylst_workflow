@@ -1,4 +1,4 @@
-metals: Co
+metals: Mn
 delete_dirs: false
-node_config: 40:1:xeon40el8:30h
+node_config: 1:1:xeon24el8_test:10m
 master_database_dir: /home/energy/rogle/asm_orr_rxn/check_master
