@@ -21,10 +21,10 @@ g_h2 = -7.128  # eV/molecule (Free energy + BEEF correction)
 g_h2o = -12.869  # eV/molecule (Free energy + BEEF correction)
 database_dir = Path(__file__).parent.parent.parent / "runs" / "databases"
 
-ph = 0
-u = 0.7
-
 config = read_config()
+
+ph = config["ph"]
+u = config["u"]
 
 
 def acid_stability(
@@ -769,35 +769,26 @@ def main(**data: dict) -> tuple[bool, dict | None]:
     name = str(Path(run_struc).stem).replace(metal, "M")  # type: ignore
     h_master = {"0H": e_xc}
     for hs in range(1, 5):
-        find_config_min = []
-        # for conf in range(1, 5):
-        for row in xch_db.select(carbon_structure=carbon_structure):
-            try:
-                xch_correction = retreive_sql_correction(
-                    os.path.join(database_dir, "e_xch_vib_solv_implicit_corrections"),
-                    {"name": f"{name}_{hs}H_config1"},
-                )
-            except NameError:
-                xch_correction = retreive_sql_correction(
-                    os.path.join(
-                        master_dir, "e_xch_vib_solv_implicit_corrections_master"
-                    ),
-                    {"name": f"{name}_{hs}H_config1"},
-                )
-
-            if xch_correction is not None:
-                corrected_energy = row.energy + float(xch_correction)
-                find_config_min.append(corrected_energy)
-            else:
-                run_logger(
-                    f"Could not find {name}_{hs}H_config1 in the thermal corrections database",
-                    str(__file__),
-                    "error",
-                )
-        if find_config_min:
-            h_master[f"{hs}H"] = min(find_config_min)
+        try:
+            xch_correction = retreive_sql_correction(
+                os.path.join(database_dir, "e_xch_vib_solv_implicit_corrections"),
+                {"name": f"{name}-{hs}H_config1"},
+            )
+        except NameError:
+            xch_correction = retreive_sql_correction(
+                os.path.join(master_dir, "e_xch_vib_solv_implicit_corrections_master"),
+                {"name": f"{name}-{hs}H_config1"},
+            )
+        if xch_correction is not None:
+            row = xch_db.get(name=f"{name}-{hs}H_config1")
+            corrected_energy = row.energy + float(xch_correction)
+            h_master[f"{hs}H"] = corrected_energy
         else:
-            # initialize with a high value so if xh calculation(s) dont converge, it will be too large
+            run_logger(
+                f"Could not find {name}-{hs}H_config1 in the thermal corrections database",
+                str(__file__),
+                "info",
+            )
             h_master[f"{hs}H"] = 9999
     if h_master["1H"] == 9999:
         run_logger(
@@ -806,7 +797,7 @@ def main(**data: dict) -> tuple[bool, dict | None]:
         raise ValueError(f"Could not find any 1H configurations for {name}")
     thermal_ooh = float(
         retreive_sql_correction(
-            os.path.join(database_dir, "e_ads_vib_corrections_master"), data
+            os.path.join(master_dir, "e_ads_vib_corrections_master"), data
         )
     )
     e_mn4_ooh_corr = (

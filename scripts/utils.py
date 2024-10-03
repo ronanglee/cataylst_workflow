@@ -516,7 +516,7 @@ def check_for_duplicates_sql(save_file: str, data: dict, master: bool) -> bool:
         return False
 
 
-def retreive_sql_correction(save_file: str, data: dict) -> float:
+def retreive_sql_correction(save_file: str, data: dict) -> float | None:
     """Retrieve the correction from the database.
 
     Args:
@@ -526,6 +526,7 @@ def retreive_sql_correction(save_file: str, data: dict) -> float:
     Returns:
         correction (float): The correction.
     """
+    correction = None
     conn = sqlite3.connect(f"{save_file}.db")
     cursor = conn.cursor()
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
@@ -621,6 +622,8 @@ def get_vibrational_correction() -> float:
                 zpe_tot += 0.5 * e  # type: ignore
                 u_tot += e / (np.exp(e / kt) - 1)
                 ts_tot += rt * (kt / rt) * (u / kt - np.log(1 - np.exp(-e / kt)))
+            if "Zero-point energy" in line:
+                break
     correction = zpe_tot + u_tot - ts_tot
     return correction
 
@@ -736,7 +739,7 @@ def run_logger(msg: str, filename: str, type_msg: str) -> None:
         ],
     )
 
-    logger = logging.getLogger(filename)
+    logger = logging.getLogger(filename.split("catalyst_workflow/")[-1])
     if type_msg == "error":
         logger.error(msg)
     else:

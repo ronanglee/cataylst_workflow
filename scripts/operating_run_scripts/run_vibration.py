@@ -75,9 +75,7 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
     database[struc_name]["ads2"] = "OOH"
     database["name"] = f"{list(database.keys())[0]}"
     if os.path.exists("vibration.txt"):
-        if not check_for_duplicates_sql(
-            "e_ads_vib_corrections", database, master=False
-        ):
+        if not check_for_duplicates_sql("e_ads_vib_corrections", data, master=False):
             correction = get_vibrational_correction()
             database[struc_name]["correction"] = correction
             print("Inserting into vibrational database", flush=True)

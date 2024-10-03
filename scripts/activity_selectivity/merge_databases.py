@@ -27,22 +27,21 @@ def insert_data(save_file: os.PathLike, data: tuple) -> None:
     columns = cursor.fetchall()
     # columns[1] gets the second column, [1] gets the name of the column
     second_column_name = columns[1][1]
-    check_query = (
-        f"SELECT 1 FROM {name} WHERE {second_column_name} = ? AND value = ? LIMIT 1"
-    )
+    check_query = f"SELECT 1 FROM {name} WHERE {second_column_name} = ? LIMIT 1"
     if isinstance(data[1], bytes):
-        check_data = (data[0], data[1].decode("utf-8"))
-    cursor.execute(check_query, (data[0], data[1]))
+        data = (data[0], data[1].decode("utf-8"))
+
+    cursor.execute(check_query, (data[0],))
 
     result = cursor.fetchone()
     if result:
         pass
     else:
-        print(f"inserting into {save_file}", check_data, flush=True)
-        config_name, value = check_data
+        print(f"inserting into {save_file}", data, flush=True)
+        config_name, value = data
         cursor.execute(
-            """
-            INSERT INTO Configurations (config_name, value)
+            f"""
+            INSERT INTO {name} ({second_column_name}, value)
             VALUES (?, ?)
         """,
             (config_name, value),
@@ -90,7 +89,9 @@ def merge(local_db: os.PathLike, master_db: os.PathLike) -> None:
             continue
         print(f"checking {db} in {local_db}", flush=True)
         if "vib" in db and "corrections" in db:
-            indiv_db = os.path.join(local_db, db.replace("_master", ""))
+            indiv_db = os.path.join(
+                local_db, str(Path(db).stem).replace("_master", ".db")
+            )
             if not os.path.exists(indiv_db):
                 print(f"{indiv_db} does not exist", flush=True)
                 continue
@@ -103,13 +104,15 @@ def merge(local_db: os.PathLike, master_db: os.PathLike) -> None:
                     key2 = d[2]
                     insert_data(Path(db), (key1, key2))
         else:
-            new_loc = os.path.join(local_db, db.replace("_master", ""))
+            new_loc = os.path.join(
+                local_db, str(Path(db).stem).replace("_master", ".db")
+            )
             if os.path.exists(new_loc):
                 master_db_connected = connect(db)
                 local_db_connected = connect(new_loc)
                 for row in local_db_connected.select():
                     try:
                         master_db_connected.get(name=row.name)
-                    except NameError:
+                    except KeyError:
                         print(f"inserting {row.name} into {db}", flush=True)
                         master_db_connected.write(row)

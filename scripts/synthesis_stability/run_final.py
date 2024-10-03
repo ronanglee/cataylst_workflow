@@ -61,10 +61,14 @@ def try_local_then_master(data_base_folder: os.PathLike, data: dict) -> list:
 
     try:
         e_m_db = connect(os.path.join(local_dir, f"{db_names[3]}.db"))
-        e_m = e_m_db.get(metal=metal).energy
+        e_m = e_m_db.get(metal=metal).energy / len(
+            e_m_db.get_atoms(metal=metal)
+        )  # ev/atom
     except AssertionError:
         e_m_db = connect(os.path.join(master_dir, f"{db_names[3]}_master.db"))
-        e_m = e_m_db.get(metal=metal).energy
+        e_m = e_m_db.get(metal=metal).energy / len(
+            e_m_db.get_atoms(metal=metal)
+        )  # ev/atom
 
     try:
         e_xc_db = connect(os.path.join(local_dir, f"{db_names[4]}.db"))
@@ -126,7 +130,6 @@ def main(**data: dict) -> tuple[bool, dict | None]:
             "error",
         )
         return False, None
-    return True, data
 
 
 if __name__ == "__main__":
