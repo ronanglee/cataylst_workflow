@@ -8,10 +8,10 @@ def vasp_input() -> dict:
         "ispin": 2,  # spin polarized? (1: no, 2: yes)
         "lorbit": 11,  # print magmoms to the OUTCAR
         # use 'Fast' in case of convergence problems try 'Normal' or 'All' (see documentation)
-        "algo": "Normal",
+        "algo": "Fast",
         "ediff": 1e-06,  # break condition for the electronic SC-loop
         # break condition for ionic relaxation, positive: energy; negative: forces
-        "ediffg": -0.025,
+        "ediffg": -0.03,
         "nelmin": 0,  # Force the minimum number of SC-steps
         # relaxation scheme (0: relax ions only; see documentation for other)
         "isif": 4,
@@ -45,6 +45,6 @@ def vasp_input() -> dict:
         "zab_vdw": -1.8867,
         "luse_vdw": True,
         "maxmix": 200,
-        "ncore": 4,
+        "ncore": 8,
     }
     return params

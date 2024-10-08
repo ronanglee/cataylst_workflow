@@ -3,6 +3,8 @@ from pathlib import Path
 
 from perqueue.constants import INDEX_KW  # type: ignore
 from utils import (  # type: ignore
+    check_ase_database,
+    check_for_duplicates_sql,
     operating_stability_run_vasp,
     read_and_write_database,
     run_logger,
@@ -17,22 +19,32 @@ def e_xch(data: dict, vasp_parameters: dict) -> bool:
         data (dict): Dictionary containing the run parameters.
 
     Returns:
-        True if the calculation converged, False otherwise.
+        converged (bool): True if the calculation converged, raise error otherwise.
     """
     run_dir = Path(data["run_dir"])
     config = Path(data["run_dir"]).stem
     structure = Path(data["run_dir"]).parent.stem
-    if os.path.exists(run_dir / "OUTCAR.RDip"):
-        outcar = Path(run_dir) / "OUTCAR.RDip"
-        return True
+    data["name"] = f"{structure}-{config}"
+    print("entering e_xch", flush=True)
+    if check_ase_database("e_xch_solv_implicit_without_corrections", data, master=True):
+        print(
+            "In master e_xch_solv_implicit_without_corrections database already",
+            flush=True,
+        )
+        if check_for_duplicates_sql(
+            "e_xch_vib_solv_implicit_corrections", data, master=True
+        ):
+            print(
+                "In master e_xch_vib_solv_implicit_corrections database already",
+                flush=True,
+            )
+            return True
     converged = operating_stability_run_vasp(
-        run_dir,
-        vasp_parameters,
-        "e_xch_solv_implicit",
+        run_dir, vasp_parameters, "e_xch_solv_implicit", data
     )
     if converged:
         outcar = Path(run_dir) / "OUTCAR.RDip"
-        read_and_write_database(outcar, "e_xch_solv_implicit", data)
+        read_and_write_database(outcar, "e_xch_solv_implicit_without_corrections", data)
         return True
     else:
         run_logger(
@@ -41,7 +53,8 @@ def e_xch(data: dict, vasp_parameters: dict) -> bool:
             "error",
         )
         print(
-            f"e_xch_solv_implicit calculation did not converge for {config} in {structure}."
+            f"e_xch_solv_implicit calculation did not converge for {config} in {structure}.",
+            flush=True,
         )
         raise ValueError(
             f"e_xch_solv_implicit calculation did not converge for {config} in {structure}."

@@ -2,14 +2,17 @@ import json
 import logging
 import os
 import re
+import sqlite3
 from itertools import combinations
 from pathlib import Path
 
 import numpy as np  # type: ignore
+import yaml  # type: ignore
 from ase.build import add_adsorbate  # type: ignore
 from ase.calculators.vasp import Vasp  # type: ignore
 from ase.db import connect  # type: ignore
 from ase.io import read, write  # type: ignore
+from ase.vibrations import Vibrations  # type: ignore
 
 
 def check_electronic(set_nelm: int) -> int:
@@ -56,6 +59,25 @@ def check_ion(set_nsw: int) -> int:
         return 0
 
 
+def get_adsorbateid(file: os.PathLike, len_vib: int) -> list:
+    """Get the adsorbate id.
+
+    Args:
+        file (Path): Path to the file containing the initial geometry.
+        len_vib (int): Number of adsorbate atoms.
+
+    Returns:
+       adsorbate_id (int): Adsorbate atoms IDs.
+    """
+    system = read(file)
+    initial_distances = []
+    for idx, atom in enumerate(system):
+        initial_distances.append((idx, atom.z))
+    sorted_list = sorted(initial_distances, key=lambda t: t[1])[-int(len_vib) :]  # noqa
+    adsorbate_id = [i[0] for i in sorted_list]
+    return adsorbate_id
+
+
 def synthesis_stability_run_vasp(
     directory: os.PathLike, vasp_parameters: dict, calculation: str
 ) -> bool:
@@ -72,6 +94,7 @@ def synthesis_stability_run_vasp(
     converged = False
     control_ion = 0
     os.chdir(directory)
+    print(f"Running {calculation} calculation in {directory}", flush=True)
     atoms = read(os.path.join(directory, "init.POSCAR"))
     mag = magmons()
     for atom in atoms:
@@ -87,10 +110,9 @@ def synthesis_stability_run_vasp(
     nelm = calc.int_params["nelm"]
     control_electronic = check_electronic(nelm)
     if control_electronic == 0:
-        print("Error: electronic scf")
+        print("Error: electronic scf", flush=True)
         control_ion = 1
     else:
-        """Check if force converged"""
         ext = "SP"
         for f in [
             "OSZICAR",
@@ -117,14 +139,12 @@ def synthesis_stability_run_vasp(
         calc = Vasp(**paramscopy)
         atoms.set_calculator(calc)
         atoms.get_potential_energy()
-        """Check if a vasp calculation (eletronic self consistance) is converged"""
         nelm = calc.int_params["nelm"]
         control_electronic = check_electronic(nelm)
         if control_electronic == 0:
-            print("Error: electronic scf")
+            print("Error: electronic scf", flush=True)
             control_ion = 1
         else:
-            """Check if force converged"""
             nsw = calc.int_params["nsw"]
             control_ion = check_ion(nsw)
             if control_ion == 1:
@@ -139,7 +159,6 @@ def synthesis_stability_run_vasp(
                     "OUTCAR",
                 ]:
                     os.system(f"cp {f} {f}.{ext}")
-                # Clean up
                 for f in [
                     "CHG",
                     "CHGCAR",
@@ -166,7 +185,7 @@ def synthesis_stability_run_vasp(
     if converged:
         return True
     else:
-        print(f"{calculation} calculation did not converge.")
+        print(f"{calculation} calculation did not converge.", flush=True)
         return False
 
 
@@ -174,7 +193,8 @@ def operating_stability_run_vasp(
     directory: os.PathLike,
     vasp_parameters: dict,
     calculation: str,
-    solvation: bool | None = False,
+    data: dict,
+    solvation: bool | None = True,
 ) -> bool:
     """Run the VASP calculations.
 
@@ -182,6 +202,7 @@ def operating_stability_run_vasp(
         directory (Path): Path to the directory where to find the initial geometry.
         vasp_parameters (dict): Dictionary containing the VASP parameters.
         calculation (str): Type of calculation to run.
+        data (dict): Dictionary containing the run parameters.
         solvation (bool): Whether to run the calculation with implicit solvation and dipole correction or not.
 
     Returns:
@@ -190,156 +211,342 @@ def operating_stability_run_vasp(
     converged = False
     control_ion = 0
     os.chdir(directory)
+    print(f"Running {calculation} calculation in {directory}", flush=True)
     atoms = read(os.path.join(directory, "init.POSCAR"))
     mag = magmons()
     for atom in atoms:
         if atom.symbol in mag.keys():
             atom.magmom = mag[atom.symbol]
     control_ion = 0
-    # static calculation always at the beginning
-    vasp_parameters["istart"] = 0  # strart from being from scratch
-    vasp_parameters["icharg"] = 2  # take superposition of atomic charge density
-    vasp_parameters["nsw"] = 0
-    vasp_parameters["lcharg"] = True
-    vasp_parameters["lwave"] = False
-    vasp_parameters["isif"] = 0
-    paramscopy = vasp_parameters.copy()
-    calc1 = Vasp(**paramscopy)
-    atoms.set_calculator(calc1)
-    atoms.get_potential_energy()
-    """Check if a vasp calculation (electronic self consistance) is converged"""
-    nelm = calc1.int_params["nelm"]
-    control_electronic = check_electronic(nelm)
-    if control_electronic == 0:
-        print("Error: electronic scf")
-        control_ion = 1
-    else:
-        ext = "preSP"
-        for f in [
-            "INCAR",
-            "POSCAR",
-            "POTCAR",
-            "CONTCAR",
-            "OUTCAR",
-            "OSZICAR",
-            "vasp.out",
-        ]:
-            os.system("cp %s %s.%s" % (f, f, ext))
-    # relax and dipole correction calculation
-    atoms = read("CONTCAR")
-    for atom in atoms:
-        if atom.symbol in mag.keys():
-            atom.magmom = mag[atom.symbol]
-    vasp_parameters["istart"] = 0  # not to read WAVECAR
-    vasp_parameters["icharg"] = 1  # restrat from CHGCAR
-    vasp_parameters["ldipol"] = True
-    vasp_parameters["idipol"] = 3
-    vasp_parameters["dipol"] = atoms.get_center_of_mass(scaled=True)
-    if solvation == "implicit":
+    if os.path.exists("vibration.txt"):
+        if not check_for_duplicates_sql(
+            "e_xch_vib_solv_implicit_corrections", data, master=False
+        ):
+            correction = get_vibrational_correction()
+            struc_name = Path(data["run_dir"]).parent.stem
+            config = Path(data["run_dir"]).stem
+            database = [f"{struc_name}-{config}", correction]
+            data_base_folder = Path(data["base_dir"]) / "runs" / "databases"
+            insert_data(
+                os.path.join(data_base_folder, "e_xch_vib_solv_implicit_corrections"),
+                database,
+            )
+        return True
+    if not os.path.exists("OUTCAR.RDip"):
+        # static calculation always at the beginning
+        vasp_parameters["istart"] = 0
+        # take superposition of atomic charge density
+        vasp_parameters["icharg"] = 2
+        vasp_parameters["nsw"] = 0
+        vasp_parameters["lcharg"] = True
+        vasp_parameters["lwave"] = False
+        vasp_parameters["isif"] = 0
+        paramscopy = vasp_parameters.copy()
+        calc1 = Vasp(**paramscopy)
+        atoms.set_calculator(calc1)
+        atoms.get_potential_energy()
+        nelm = calc1.int_params["nelm"]
+        control_electronic = check_electronic(nelm)
+        if control_electronic == 0:
+            print("Error: electronic scf", flush=True)
+            control_ion = 1
+        else:
+            ext = "preSP"
+            for f in [
+                "INCAR",
+                "POSCAR",
+                "POTCAR",
+                "CONTCAR",
+                "OUTCAR",
+                "OSZICAR",
+                "vasp.out",
+            ]:
+                os.system("cp %s %s.%s" % (f, f, ext))
+        # relax and dipole correction calculation
+        atoms = read("CONTCAR")
+        for atom in atoms:
+            if atom.symbol in mag.keys():
+                atom.magmom = mag[atom.symbol]
+        # not to read WAVECAR
+        vasp_parameters["istart"] = 0
+        # restart from CHGCAR
+        vasp_parameters["icharg"] = 1
+        vasp_parameters["ldipol"] = True
+        vasp_parameters["idipol"] = 3
+        vasp_parameters["dipol"] = atoms.get_center_of_mass(scaled=True)
+        if solvation:
+            vasp_parameters["isif"] = 0
+            vasp_parameters["lwave"] = True
+            vasp_parameters["lcharg"] = True
+            vasp_parameters["nsw"] = 50
+        else:
+            vasp_parameters["isif"] = 0
+            vasp_parameters["lwave"] = False
+            vasp_parameters["lcharg"] = True
+            vasp_parameters["nsw"] = 50
+        paramscopy = vasp_parameters.copy()
+        calc2 = Vasp(**paramscopy)
+        atoms.set_calculator(calc2)
+        atoms.get_potential_energy()
+        nelm = calc2.int_params["nelm"]
+        control_electronic = check_electronic(nelm)
+        if control_electronic == 0:
+            print("Error: electronic scf", flush=True)
+            control_ion = 1
+        else:
+            nsw = calc2.int_params["nsw"]
+            control_ion = check_ion(nsw)
+            ext = "preRDip"
+            for f in [
+                "INCAR",
+                "POSCAR",
+                "POTCAR",
+                "CONTCAR",
+                "OUTCAR",
+                "OSZICAR",
+                "vasp.out",
+            ]:
+                os.system("cp %s %s.%s" % (f, f, ext))
+        # clean up
+        for f in ["DOSCAR", "EIGENVAL", "PROCAR", "vasprun.xml"]:
+            os.system("rm %s" % f)
+        control_ion = 0
+        os.system("cp CONTCAR.preRDip CONTCAR")
+        os.system("cp WAVECAR.preRDip WAVECAR")
+        # relaxation with solvation and dipole correction
+        atoms = read("CONTCAR")
+        for atom in atoms:
+            if atom.symbol in mag.keys():
+                atom.magmom = mag[atom.symbol]
+        # start from WAVECAR in vaccum
+        vasp_parameters["istart"] = 1
+        vasp_parameters["nsw"] = 500
+        vasp_parameters["ldipol"] = True
+        vasp_parameters["idipol"] = 3
+        vasp_parameters["dipol"] = atoms.get_center_of_mass(scaled=True)
         vasp_parameters["isif"] = 0
         vasp_parameters["lwave"] = True
         vasp_parameters["lcharg"] = True
-        vasp_parameters["nsw"] = 50
-    else:
-        vasp_parameters["isif"] = 0
-        vasp_parameters["lwave"] = False
-        vasp_parameters["lcharg"] = True
-        vasp_parameters["nsw"] = 50
-    paramscopy = vasp_parameters.copy()
-    calc2 = Vasp(**paramscopy)
-    atoms.set_calculator(calc2)
-    atoms.get_potential_energy()
-    """Check if a vasp calculation is converged"""
-    nelm = calc2.int_params["nelm"]
-    control_electronic = check_electronic(nelm)
-    if control_electronic == 0:
-        print("Error: electronic scf")
-        control_ion = 1
-    else:
-        """Check if force converged"""
-        nsw = calc2.int_params["nsw"]
-        control_ion = check_ion(nsw)
-        if control_ion == 1:
-            if solvation == "implicit":
-                ext = "preRDip"
-            else:
+        vasp_parameters["lsol"] = True
+        vasp_parameters["eb_k"] = 80
+        paramscopy = vasp_parameters.copy()
+        calc4 = Vasp(**paramscopy)
+        atoms.set_calculator(calc4)
+        atoms.get_potential_energy()
+        nelm = calc4.int_params["nelm"]
+        control_electronic = check_electronic(nelm)  # check electronic scf
+        if control_electronic == 0:
+            print("Error: electronic scf", flush=True)
+            control_ion = 1
+        else:
+            nsw = calc4.int_params["nsw"]
+            control_ion = check_ion(nsw)
+            if control_ion == 1:
                 ext = "RDip"
-            for f in [
-                "INCAR",
-                "POSCAR",
-                "POTCAR",
-                "CONTCAR",
-                "OUTCAR",
-                "OSZICAR",
-                "vasp.out",
-            ]:
-                os.system("cp %s %s.%s" % (f, f, ext))
-    # clean up
-    for f in ["DOSCAR", "EIGENVAL", "PROCAR", "vasprun.xml"]:
-        os.system("rm %s" % f)
-    control_ion = 0
-    os.system("cp CONTCAR.preRDip CONTCAR")
-    os.system("cp WAVECAR.preRDip WAVECAR")
-    # relaxation with solvation and dipole correction
-    atoms = read("CONTCAR")
-    for atom in atoms:
-        if atom.symbol in mag.keys():
-            atom.magmom = mag[atom.symbol]
-    vasp_parameters["istart"] = 1  # start from WAVECAR in vaccum
-    vasp_parameters["nsw"] = 500
-    vasp_parameters["ldipol"] = True
-    vasp_parameters["idipol"] = 3
-    vasp_parameters["dipol"] = atoms.get_center_of_mass(scaled=True)
-    vasp_parameters["isif"] = 0
-    vasp_parameters["lwave"] = True
-    vasp_parameters["lcharg"] = True
-    vasp_parameters["lsol"] = True
-    vasp_parameters["eb_k"] = 80
-    vasp_parameters["isif"] = 0
-    paramscopy = vasp_parameters.copy()
-    calc4 = Vasp(**paramscopy)
-    atoms.set_calculator(calc4)
-    atoms.get_potential_energy()
-    """Check if a vasp electronic calculation is converged"""
-    nelm = calc4.int_params["nelm"]
-    control_electronic = check_electronic(nelm)  # check electronic scf
-    if control_electronic == 0:
-        print("Error: electronic scf")
-        control_ion = 1
-    else:
-        """Check if force converged"""
-        nsw = calc4.int_params["nsw"]
-        control_ion = check_ion(nsw)
-        if control_ion == 1:
-            ext = "RDip"
-            for f in [
-                "INCAR",
-                "POSCAR",
-                "POTCAR",
-                "CONTCAR",
-                "OUTCAR",
-                "OSZICAR",
-                "vasp.out",
-            ]:
-                os.system("cp %s %s.%s" % (f, f, ext))
+                for f in [
+                    "INCAR",
+                    "POSCAR",
+                    "POTCAR",
+                    "CONTCAR",
+                    "OUTCAR",
+                    "OSZICAR",
+                    "vasp.out",
+                    "WAVECAR",
+                ]:
+                    os.system("cp %s %s.%s" % (f, f, ext))
                 converged = True
-    # clean up
-    for f in [
-        "CHG",
-        "CHGCAR",
-        "WAVECAR",
-        "POSCAR",
-        "CONTCAR",
-        "DOSCAR",
-        "EIGENVAL",
-        "PROCAR",
-    ]:
-        os.system("rm %s" % f)
+    if converged or os.path.exists("OUTCAR.RDip"):
+        if calculation == "e_xch_solv_implicit":
+            converged = False
+            atoms = read("CONTCAR.RDip")
+            for atom in atoms:
+                if atom.symbol in mag.keys():
+                    atom.magmom = mag[atom.symbol]
+            os.system("cp WAVECAR.RDip WAVECAR")
+            vasp_parameters["istart"] = 1
+            vasp_parameters["ldipol"] = True
+            vasp_parameters["idipol"] = 3
+            vasp_parameters["dipol"] = atoms.get_center_of_mass(scaled=True)
+            vasp_parameters["isif"] = 0
+            vasp_parameters["nsw"] = 999
+            vasp_parameters["eb_k"] = 80
+            paramscopy = vasp_parameters.copy()
+            calc = Vasp(**paramscopy)
+            atoms.set_calculator(calc)
+            atoms.get_potential_energy()
+            nelm = calc.int_params["nelm"]
+            control_electronic = check_electronic(nelm)
+            if control_electronic == 0:
+                print("Error: electronic scf", flush=True)
+            else:
+                nsw = calc.int_params["nsw"]
+                control_ion = check_ion(nsw)
+                if control_ion == 1:
+                    ext = "vib"
+                    for f in [
+                        "INCAR",
+                        "POSCAR",
+                        "POTCAR",
+                        "CONTCAR",
+                        "OUTCAR",
+                        "OSZICAR",
+                        "vasp.out",
+                    ]:
+                        os.system("cp %s %s.%s" % (f, f, ext))
+                    init_poscar = read(
+                        os.path.join(data["run_structure"], "init.POSCAR")
+                    )
+                    # exclude the metal atom
+                    indices = [atom.index for atom in init_poscar][:-1]
+                    current_indices = [atom.index for atom in atoms]
+                    len_vib = len(current_indices) - len(indices)
+                    adsorbate_id = get_adsorbateid(Path("init.POSCAR"), len_vib)
+                    vibindices = adsorbate_id
+                    vib = Vibrations(
+                        atoms, indices=vibindices, name="vib", delta=0.01, nfree=2
+                    )
+                    # workaround for ASE error creating empty vibration json file(s)
+                    try:
+                        vib.run()
+                    except TypeError:
+                        cwd = os.getcwd()
+                        vib_dir = Path(cwd) / "vib"
+                        for filename in os.listdir(vib_dir):
+                            file_path = os.path.join(vib_dir, filename)
+                            if os.path.isfile(file_path):
+                                if os.path.getsize(file_path) == 0:
+                                    os.remove(file_path)
+                        vib.run()
+                    vib.get_energies()
+                    vib.summary(log="vibration.txt")
+                    for i in range(3 * len(vibindices)):
+                        vib.write_mode(i)
+                    correction = get_vibrational_correction()
+                    struc_name = Path(data["run_dir"]).parent.stem
+                    config = Path(data["run_dir"]).stem
+                    database = [f"{struc_name}-{config}", correction]
+                    data_base_folder = Path(data["base_dir"]) / "runs" / "databases"
+                    insert_data(
+                        os.path.join(
+                            data_base_folder, "e_xch_vib_solv_implicit_corrections"
+                        ),
+                        database,
+                    )
+                    converged = True
+        # clean up
+        for f in [
+            "CHG",
+            "CHGCAR",
+            "WAVECAR",
+            "POSCAR",
+            "CONTCAR",
+            "DOSCAR",
+            "EIGENVAL",
+            "PROCAR",
+            "WAVECAR.RDip",
+        ]:
+            os.system("rm %s" % f)
     if converged:
         return True
     else:
-        print(f"{calculation} calculation did not converge.")
+        print(f"{calculation} calculation did not converge.", flush=True)
         return False
+
+
+def create_database(save_file: str) -> None:
+    """Create a SQL database.
+
+    Args:
+       save_file (str): Name of the database.
+
+    Returns:
+         None
+    """
+    conn = sqlite3.connect(f"{save_file}.db")
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+    CREATE TABLE IF NOT EXISTS Configurations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        config_name TEXT NOT NULL,
+        value REAL NOT NULL
+        )
+    """
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def check_for_duplicates_sql(save_file: str, data: dict, master: bool) -> bool:
+    """Check if the database already contains the data.
+
+    Args:
+       save_file (str): Name of the database.
+       data (dict): Dictionary containing the data to be checked.
+       master (bool): True if the database is the master database, False otherwise.
+
+    Returns:
+        bool: True if the data is already in the database, False otherwise.
+    """
+    name = None
+    config = read_config()
+    if master:
+        data_base_folder = config["master_database_dir"]
+        conn = sqlite3.connect(os.path.join(data_base_folder, f"{save_file}_master.db"))
+    else:
+        data_base_folder = Path(data["base_dir"]) / "runs" / "databases"
+        conn = sqlite3.connect(os.path.join(data_base_folder, f"{save_file}.db"))
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+
+    tables = cursor.fetchall()
+    for table in tables:
+        name = table[0]
+        break
+    if name is None:
+        return False
+    cursor.execute(f"SELECT * FROM {name}")
+
+    result = [row[1] for row in cursor.fetchall()]
+    if data["name"] in result:
+        return True
+    else:
+        return False
+
+
+def retreive_sql_correction(save_file: str, data: dict) -> float | None:
+    """Retrieve the correction from the database.
+
+    Args:
+       save_file (str): Name of the database.
+       data (dict): Dictionary containing the data to be checked.
+
+    Returns:
+        correction (float): The correction.
+    """
+    correction = None
+    conn = sqlite3.connect(f"{save_file}.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+
+    tables = cursor.fetchall()
+    for table in tables:
+        name = table[0]
+        break
+    cursor.execute(f"SELECT * FROM {name}")
+
+    result = [row for row in cursor.fetchall()]
+    for res in result:
+        if data["name"] == res[1]:
+            if isinstance(res[2], float):
+                correction = res[2]
+            elif isinstance(res[2], str):
+                json_data = json.loads(res[2])
+                correction = json_data["correction"]
+            break
+    return correction
 
 
 def gather_structs(data: dict, metals: list) -> dict:
@@ -350,76 +557,46 @@ def gather_structs(data: dict, metals: list) -> dict:
        metals (list): List of metals.
 
     Returns:
-       workflow_data: Dictionary containing the run structure, base directory and metal.
+       workflow_data (dict): Dictionary containing the run structure, base directory and metal.
     """
     workflow_data = {}
     run_structures = data["all_run_structures"]
     metal = data["metal"]
-    dopants = data["dopants"]
     carbon_structure = data["carbon_structure"]
     wanted_structures = []
     for struc_path in run_structures:
         structure = read(Path(struc_path) / Path("init.POSCAR"))
-        if structure[35].symbol in metals:
+        # if structure[35].symbol in metals:
+        #     cs = "armchair"
+        # elif structure[45].symbol in metals or structure[38].symbol in metals:
+        #     cs = "zigzag"
+        # elif structure[62].symbol in metals:
+        #     cs = "bulk"
+        if "A" in Path(struc_path).stem:
             cs = "armchair"
-        elif structure[45].symbol in metals or structure[38].symbol in metals:
+        elif "Z" in Path(struc_path).stem:
             cs = "zigzag"
-        elif structure[62].symbol in metals:
+        else:
             cs = "bulk"
         if carbon_structure == cs and metal in structure.get_chemical_symbols():
             wanted_structures.append(struc_path)
-    idx = 0
-    for struc_path in wanted_structures:
+    for idx, struc_path in enumerate(wanted_structures):
         structure = read(Path(struc_path) / Path("init.POSCAR"))
-
-        if (
-            "S" in structure.get_chemical_symbols()
-            and "B" in structure.get_chemical_symbols()
-        ):
-            workflow_data[idx] = {
-                "base_dir": data["base_dir"],
-                "run_structure": str(struc_path).replace("Pt", metal),
-                "carbon_structure": carbon_structure,
-                "metal": metal,
-                "dopant": "SB",
-            }
-            idx += 1
-        elif "O" in structure.get_chemical_symbols():
-            workflow_data[idx] = {
-                "base_dir": data["base_dir"],
-                "run_structure": str(struc_path).replace("Pt", metal),
-                "carbon_structure": carbon_structure,
-                "metal": metal,
-                "dopant": "O",
-            }
-            idx += 1
-        elif dopants and "B" in structure.get_chemical_symbols():
-            new_dopants = []
-            for dopant in dopants:
-                if dopant != "O":
-                    if dopant != "SB":
-                        new_dopants.append(dopant)
-            for dopant in new_dopants:
-                data = {
-                    "base_dir": data["base_dir"],
-                    "run_structure": str(
-                        struc_path.replace("B", dopant).replace("Pt", metal)
-                    ),
-                    "carbon_structure": carbon_structure,
-                    "metal": metal,
-                    "dopant": dopant,
-                }
-                workflow_data[idx] = data
-                idx += 1
-        else:
-            workflow_data[idx] = {
-                "base_dir": data["base_dir"],
-                "run_structure": str(struc_path).replace("Pt", metal),
-                "carbon_structure": carbon_structure,
-                "metal": metal,
-                "dopant": "",
-            }
-            idx += 1
+        dopant = ""
+        for atom in structure:
+            if (
+                atom.symbol not in ["N", "C", "H"]
+                and atom.symbol not in dopant
+                and atom.symbol not in metals
+            ):
+                dopant += atom.symbol
+        workflow_data[idx] = {
+            "base_dir": data["base_dir"],
+            "run_structure": str(struc_path).replace("Pt", metal),
+            "carbon_structure": carbon_structure,
+            "metal": metal,
+            "dopant": f"{dopant}",
+        }
     return workflow_data
 
 
@@ -427,71 +604,28 @@ def get_vibrational_correction() -> float:
     """Calculate vibrational correction.
 
     Returns:
-        float: Vibrational correction.
+        correction (float): Vibrational correction.
     """
     kt = 0.02568
     rt = 298.15
-    vib_file = open("vibration.txt")
     zpe_tot = 0
     u_tot = 0
     ts_tot = 0
-    for line in vib_file:
-        pattern = re.compile(r"\s*(\d+)\s+(?P<energy>\d+\.\d+)\s+(\d+\.\d+)\s*")
-        match = pattern.match(line)
-        if match:
-            finder = pattern.search(line)
-            e = float(finder.groupdict()["energy"]) / 1000  # type: ignore
-            u = e / (np.exp(e / kt) - 1)
-            zpe_tot += 0.5 * e  # type: ignore
-            u_tot += e / (np.exp(e / kt) - 1)
-            ts_tot += rt * (kt / rt) * (u / kt - np.log(1 - np.exp(-e / kt)))
+    with open("vibration.txt", "r") as vib_file:
+        for line in vib_file:
+            pattern = re.compile(r"\s*(\d+)\s+(?P<energy>\d+\.\d+)\s+(\d+\.\d+)\s*")
+            match = pattern.match(line)
+            if match:
+                finder = pattern.search(line)
+                e = float(finder.groupdict()["energy"]) / 1000  # type: ignore
+                u = e / (np.exp(e / kt) - 1)
+                zpe_tot += 0.5 * e  # type: ignore
+                u_tot += e / (np.exp(e / kt) - 1)
+                ts_tot += rt * (kt / rt) * (u / kt - np.log(1 - np.exp(-e / kt)))
+            if "Zero-point energy" in line:
+                break
     correction = zpe_tot + u_tot - ts_tot
     return correction
-
-
-def load_data(file_path: str) -> dict:
-    """Load data from a json file.
-
-    Args:
-        file_path (str): Path to the json file.
-
-    Returns:
-        Data from the json file.
-    """
-    try:
-        with open(file_path, "r") as file:
-            return json.load(file)
-    except FileNotFoundError:
-        return {}
-
-
-def save_data(file_path: str, data: dict) -> None:
-    """Save data to a json file.
-
-    Args:
-        file_path (str): Path to the json file.
-        data (dict): Data to be saved.
-
-    Returns:
-        None
-    """
-    with open(file_path, "w") as file:
-        json.dump(data, file, indent=4)
-
-
-def add_entry(file_path: str, new_entry: dict) -> None:
-    """Add a new entry to a json file.
-
-    Args:
-        file_path (str): Path to the json file.
-        new_entry (dict): New entry to be added.
-
-    Returns:
-        None
-    """
-    data = load_data(file_path)
-    data.update(new_entry)
-    save_data(file_path, data)
 
 
 def read_and_write_database(outcar: os.PathLike, database: str, data: dict) -> None:
@@ -505,12 +639,83 @@ def read_and_write_database(outcar: os.PathLike, database: str, data: dict) -> N
 
     Returns:
        None
-
     """
     data_base_folder = Path(data["base_dir"]) / "runs" / "databases"
     db = connect(data_base_folder / f"{database}.db")
     structure = read(f"{outcar}@-1")
     db.write(structure, key_value_pairs={**data})
+
+
+def read_config() -> dict:
+    """Reads the user input configuration YAML file.
+
+    Returns:
+        config_dict (dict): Configuration file as dictionary.
+    """
+    base_dir = Path(__file__).parent
+    with open(base_dir / "config.yaml") as f:
+        config_dict = yaml.safe_load(f)
+    if not isinstance(config_dict["metals"], list):
+        config_dict["metals"] = [config_dict["metals"]]
+    for key in config_dict.keys():
+        if "#" in key:
+            del config_dict[key]
+    return config_dict
+
+
+def check_ase_database(database: str, data: dict, master: bool) -> bool:
+    """Check if the ASE database already contains the data.
+
+    Args:
+        database (str): Name of the database.
+        data (dict): Dictionary containing the data to be checked.
+        master (bool): True if the database is the master database, False otherwise.
+
+    Returns:
+        bool: True if the database contains the data, False otherwise.
+    """
+    config = read_config()
+    if master:
+        database_dir = config["master_database_dir"]
+        db = connect(Path(database_dir) / f"{database}_master.db")
+    else:
+        database_dir = Path(data["base_dir"]) / "runs" / "databases"
+        db = connect(Path(database_dir) / f"{database}.db")
+    check_duplicates = []
+    for i in db.select(name=data["name"]):
+        check_duplicates.append(i)
+    if len(check_duplicates) == 1:
+        print(f"{database} database already contains the data.", flush=True)
+        return True
+    else:
+        return False
+
+
+def insert_data(save_file: str, data: list) -> None:
+    """Insert data into the SQL database.
+
+    Args:
+        save_file (str): Name of the database.
+        data (list): List containing the data to be inserted.
+
+    Returns:
+        None
+    """
+
+    create_database(save_file)
+    conn = sqlite3.connect(f"{save_file}.db")
+    cursor = conn.cursor()
+    config_name, value = data
+    cursor.execute(
+        """
+        INSERT INTO Configurations (config_name, value)
+        VALUES (?, ?)
+    """,
+        (config_name, value),
+    )
+
+    conn.commit()
+    conn.close()
 
 
 def run_logger(msg: str, filename: str, type_msg: str) -> None:
@@ -534,7 +739,7 @@ def run_logger(msg: str, filename: str, type_msg: str) -> None:
         ],
     )
 
-    logger = logging.getLogger(filename)
+    logger = logging.getLogger(filename.split("catalyst_workflow/")[-1])
     if type_msg == "error":
         logger.error(msg)
     else:
@@ -602,14 +807,14 @@ def get_xch_structs(data: dict) -> dict:
                                 base_dir,
                                 "runs",
                                 "operating_stability",
-                                "e_xch_implicit_solv",
+                                "e_xch_solv_implicit",
                                 f"{name.replace(metal, metal_str)}",
                                 f"{h}H_config{idx+1}",
                             )
                         )
                         run_dir.mkdir(exist_ok=True, parents=True)
                         write(f"{run_dir}/init.POSCAR", no_metal_copy, format="vasp")
-                        merged_dict = {**skimmed_data.copy(), "run_dir": str(run_dir)}
+                        merged_dict = {**skimmed_data.copy(), "run_dir": str(run_dir)}  # type: ignore
                         new_data[overall_idx] = merged_dict
                         overall_idx += 1
     return new_data
@@ -619,6 +824,9 @@ def magmons() -> dict:
     """All ferromagnetic or anti-ferromagnetic elements
     and their magnetic moments multiplied
     by 1.2 already for VASP calculations.
+
+    Returns:
+        dict: Dictionary containing the elements and their magnetic moments.
     """
     elements = {
         "Co": 1.2,  # multiplied by 1.2

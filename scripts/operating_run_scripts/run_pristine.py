@@ -7,6 +7,7 @@ from typing import Optional  # type: ignore
 from ase.calculators.vasp import Vasp  # type: ignore
 from ase.io import read  # type: ignore
 from utils import (  # type: ignore
+    check_ase_database,
     check_electronic,
     check_ion,
     magmons,
@@ -37,8 +38,6 @@ def check_geometry(cwd: os.PathLike) -> int:
     metal = folders[n + 2]
     carbons = []
     atoms = read("CONTCAR")
-
-    # check the metal site
     for atom in atoms:
         if atom.symbol == "C":
             carbons.append(atom.z)
@@ -47,7 +46,7 @@ def check_geometry(cwd: os.PathLike) -> int:
     c_avg = sum(carbons) / len(carbons)
     difference = abs(metal_z - c_avg)
     if difference > 2.0:
-        print("Error: metal-C distance")
+        print("Error: metal-C distance", flush=True)
         control = 0
     return control
 
@@ -60,7 +59,7 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
        data (dict): Dictionary containing the run parameters.
 
     Returns:
-       relaxed (bool): True if the calculation is done, False otherwise.
+       converged (bool): True if the calculation is done, raise error otherwise.
     """
     folders = str(cwd).split("/")
     for n in range(len(folders)):
@@ -74,7 +73,6 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
     params = vasp_input()
     paramscopy = params.copy()
     calc = Vasp(**paramscopy)
-    # start the vasp calculations
     err = 0
     control_ion = 0
     converged = False
@@ -84,10 +82,8 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
         if atom.symbol in mag.keys():
             atom.magmom = mag[atom.symbol]
     # static calculation always at the beginning
-    params["istart"] = (
-        0  # strart from being from scratch (ISTART determins whether or not to read the WAVECAR file)
-    )
-    params["icharg"] = 2  # take superposition of atomic charge density
+    params["istart"] = 0
+    params["icharg"] = 2
     params["nsw"] = 0
     params["lcharg"] = True
     params["lwave"] = False
@@ -97,11 +93,10 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
     calc1 = Vasp(**paramscopy)
     atoms.set_calculator(calc1)
     atoms.get_potential_energy()
-    """Check if a vasp calculation (electronic self consistance) is converged"""
     nelm = calc1.int_params["nelm"]
     control_electronic = check_electronic(nelm)
     if control_electronic == 0:
-        print("Error: electronic scf")
+        print("Error: electronic scf", flush=True)
         control_ion = 1
         err = 1
     else:
@@ -143,18 +138,16 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
         calc2 = Vasp(**paramscopy)
         atoms.set_calculator(calc2)
         atoms.get_potential_energy()
-        """Check if a vasp calculation (eletronic self consistance) is converged"""
         nelm = calc2.int_params["nelm"]
         control_electronic = check_electronic(nelm)
         if control_electronic == 0:
-            print("Error: electronic scf")
+            print("Error: electronic scf", flush=True)
             control_ion = 1
             err = 1
         else:
-            """Check if a reasonable geometry"""
             control_geometry = check_geometry(cwd)
             if control_geometry == 0:
-                print("Error: structure disintegrates")
+                print("Error: structure disintegrates", flush=True)
                 control_ion = 1
                 err = 1
             else:
@@ -169,7 +162,6 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
                     "vasp.out",
                 ]:
                     os.system("cp %s %s.%s" % (f, f, ext))
-        # clean up
         for f in ["DOSCAR", "EIGENVAL", "PROCAR", "vasprun.xml"]:
             os.system("rm %s" % f)
     if err == 0:
@@ -185,25 +177,22 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
         params["ldipol"] = False
         if solvation == "implicit":
             os.system("cp WAVECAR.preRDip WAVECAR")
-            params["istart"] = 1  # start from WAVECAR
+            params["istart"] = 1
             params["lwave"] = True
             params["lsol"] = True
             params["eb_k"] = 80
         else:
-            params["istart"] = (
-                0  # start from being from scratch (ISTART determins whether or not to read the WAVECAR file)
-            )
+            params["istart"] = 0
             params["lwave"] = False
         calc3 = calc
         paramscopy = params.copy()
         calc3 = Vasp(**paramscopy)
         atoms.set_calculator(calc3)
         atoms.get_potential_energy()
-        """Check if a vasp electronic calculation is converged"""
         nelm = calc3.int_params["nelm"]
         control_electronic = check_electronic(nelm)  # check electronic scf
         if control_electronic == 0:
-            print("Error: electronic scf")
+            print("Error: electronic scf", flush=True)
             control_ion = 1
             err = 1
         else:
@@ -244,24 +233,19 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
             calc4 = Vasp(**paramscopy)
             atoms.set_calculator(calc4)
             atoms.get_potential_energy()
-            """Check if a vasp electronic calculation is converged"""
             nelm = calc4.int_params["nelm"]
             control_electronic = check_electronic(nelm)  # check electronic scf
             if control_electronic == 0:
-                print("Error: electronic scf")
+                print("Error: electronic scf", flush=True)
                 control_ion = 1
                 err = 1
             else:
-                """Check if a vasp ion calculation is converged"""
-                control_geometry = check_geometry(
-                    cwd
-                )  # check matal-N and/or dopant-nb distance from CONTCAR
+                control_geometry = check_geometry(cwd)
                 if control_geometry == 0:
-                    print("Error: structure disintegrates")
+                    print("Error: structure disintegrates", flush=True)
                     control_ion = 1
                     err = 1
                 else:
-                    """Check if force converged"""
                     nsw = calc4.int_params["nsw"]
                     control_ion = check_ion(nsw)
                     if control_ion == 1:
@@ -278,7 +262,6 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
                             os.system("cp %s %s.%s" % (f, f, ext))
                         converged = True
                         outcar = Path(cwd) / "OUTCAR.RDip"
-                        data["name"] = str(Path(data["run_structure"]).stem)
                         if "implicit" in str(cwd):
                             read_and_write_database(outcar, "pristine_implicit", data)
                         elif "vac" in str(cwd):
@@ -296,7 +279,7 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
                 os.system("rm %s" % f)
 
     if converged:
-        print("Relaxation is done")
+        print("Relaxation is done", flush=True)
         return True
     else:
         run_logger(
@@ -304,7 +287,7 @@ def relax_pristine(cwd: os.PathLike, data: dict) -> bool:
             str(__file__),
             "error",
         )
-        print(f"Adsorbate relaxation calculation is not done in {cwd}")
+        print(f"Adsorbate relaxation calculation is not done in {cwd}", flush=True)
         raise ValueError(f"Adsorbate relaxation calculation is not done in {cwd}")
 
 
@@ -317,21 +300,42 @@ def main(**data: dict) -> tuple[bool, Optional[dict]]:
     Returns:
        Perqueue return tuple.
     """
-    cwd = os.getcwd()
+    original_dir = os.getcwd()
     prisitine_dir = Path(str(data["pristine"]))
     vac_dir = prisitine_dir / "vac" / "vasp_rx"
     implicit_dir = prisitine_dir / "implicit" / "vasp_rx"
     copy_data = data.copy()
     controls = []
     del copy_data["pq_index"]
+    run_structure = str(data["run_structure"])
+    name = str(Path(run_structure).stem)
+    data["name"] = name  # type: ignore
     for directory in [vac_dir, implicit_dir]:
         os.chdir(directory)
-        if os.path.exists("OUTCAR.RDip"):
+        db_name = "pristine_implicit"
+        print(f"Running {directory}", flush=True)
+        cwd = os.getcwd()
+        outcar = Path(cwd) / "OUTCAR.RDip"
+        if check_ase_database(db_name, copy_data, master=True):
+            print("In master database already", flush=True)
             controls.append(True)
-            continue
+            break
+        if os.path.exists("OUTCAR.RDip"):
+            print(f"OUTCAR.RDip exists in {cwd}", flush=True)
+            if not check_ase_database(db_name, copy_data, master=False):
+                print(f"Writing to local database for {name}", flush=True)
+                if "implicit" in str(cwd) and not check_ase_database(
+                    "pristine_implicit", copy_data, master=False
+                ):
+                    read_and_write_database(outcar, "pristine_implicit", copy_data)
+                elif "vac" in str(cwd) and not check_ase_database(
+                    "pristine_vac", copy_data, master=False
+                ):
+                    read_and_write_database(outcar, "pristine_vac", copy_data)
+            controls.append(True)
         else:
             controls.append(relax_pristine(directory, copy_data))
-    os.chdir(cwd)
+    os.chdir(original_dir)
     del copy_data["pristine"]
     if all(controls):
         return True, copy_data

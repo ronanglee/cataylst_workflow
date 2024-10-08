@@ -3,6 +3,7 @@ from pathlib import Path
 
 from ase.io import read  # type: ignore
 from utils import (  # type: ignore
+    check_ase_database,
     read_and_write_database,
     run_logger,
     synthesis_stability_run_vasp,
@@ -18,39 +19,37 @@ def e_xc(data: dict, vasp_parameters: dict) -> bool:
         vasp_parameters (dict): Dictionary containing the VASP parameters.
 
     Returns:
-        bool: True if the calculation converged, False otherwise.
+        converged (bool): True if the calculation converged, raise error otherwise.
     """
     struc_path = Path(data["run_structure"])
     base_dir = Path(data["base_dir"])
     metal = data["metal"]
-    dopant = data["dopant"]
     del data["metal"]
     run_dir = Path(os.path.join(base_dir, "runs", "synthesis_stability", "e_xc"))
     run_dir.mkdir(exist_ok=True, parents=True)
     structure = read(os.path.join(struc_path, "init.POSCAR"))
-    if dopant != "":
-        if dopant != "O":
-            if dopant != "SB":
-                for atom in structure:
-                    if atom.symbol == "B":
-                        atom.symbol = dopant
     del structure[[atom.symbol == metal for atom in structure]]
     remove_metal_dir = run_dir / Path(str(struc_path.stem).replace(metal, "M"))
     remove_metal_dir.mkdir(exist_ok=True, parents=True)
     structure.write(remove_metal_dir / "init.POSCAR")
+    data["name"] = str(Path(data["run_structure"]).stem).replace(metal, "M")
+    name = str(Path(data["run_structure"]).stem).replace(metal, "M")
+    outcar = Path(remove_metal_dir) / "OUTCAR.opt"
     if os.path.exists(remove_metal_dir / "OUTCAR.opt"):
-        outcar = Path(remove_metal_dir) / "OUTCAR.opt"
-        data["name"] = str(Path(data["run_structure"]).stem).replace(metal, "M")
+        if not check_ase_database("e_xc", data, master=False):
+            print(f"Writing to local database for {name}", flush=True)
+            read_and_write_database(outcar, "e_xc", data)
+        return True
+    if check_ase_database("e_xc", data, master=True):
+        print("In master database already", flush=True)
         return True
     converged = synthesis_stability_run_vasp(remove_metal_dir, vasp_parameters, "e_xc")
     if converged:
-        outcar = Path(remove_metal_dir) / "OUTCAR.opt"
-        data["name"] = str(Path(data["run_structure"]).stem).replace(metal, "M")
         read_and_write_database(outcar, "e_xc", data)
         return True
     else:
         run_logger("e_xc calculation did not converge.", str(__file__), "error")
-        print("e_xc calculation did not converge.")
+        print("e_xc calculation did not converge.", flush=True)
         raise ValueError("e_xc calculation did not converge.")
 
 

@@ -8,6 +8,7 @@ from ase.calculators.vasp import Vasp  # type: ignore
 from ase.db import connect  # type: ignore
 from ase.io import read, write  # type: ignore
 from utils import (  # type: ignore
+    check_ase_database,
     check_electronic,
     check_ion,
     magmons,
@@ -28,7 +29,7 @@ def adsorbsite(slab: dict, metal: str, name: str) -> tuple:
     Returns:
         tuple: x, y, z coordinates of the adsorption site."""
     if name[0] == "o" and name[6] == "m":
-        print("adsorption site name = %s" % name)
+        print("adsorption site name = %s" % name, flush=True)
         for atom in slab:
             if atom.symbol == metal:
                 metal_x = atom.x
@@ -37,7 +38,7 @@ def adsorbsite(slab: dict, metal: str, name: str) -> tuple:
         x = metal_x
         y = metal_y
         z = metal_z
-    print("adsorption site (x, y, z): %.3f %.3f %.3f" % (x, y, z))
+    print("adsorption site (x, y, z): %.3f %.3f %.3f" % (x, y, z), flush=True)
     return (x, y, z)
 
 
@@ -59,7 +60,6 @@ def place_adsorbate(cwd: os.PathLike, data: dict) -> None:
             or folders[n] == "BEEF-vdW"
         ):
             break
-    print(folders)
     metal = folders[n + 2]
     ads2 = folders[n + 9]
     ads2site = folders[n + 10]
@@ -71,7 +71,6 @@ def place_adsorbate(cwd: os.PathLike, data: dict) -> None:
     slab = slab_database.get_atoms(name=struc_name)
     ooh_db_dir = Path(data["base_dir"]) / "stock_databases"
     ooh_db = connect(os.path.join(ooh_db_dir, "ooh_ads.db"))
-    print(f"{ads2}-{ads2orient}_{solvation}")
     solv_ads = f"{ads2}-{ads2orient}_{solvation}"
     adsorb2 = ooh_db.get_atoms(name=solv_ads)
     name = ads2site
@@ -225,7 +224,7 @@ def check_geometry(cwd: os.PathLike, adsorbate_id: list) -> int:
     Returns:
         control (int): 0 if the geometry is not reasonable, 1 otherwise.
     """
-    print("Checking geometry...")
+    print("Checking geometry...", flush=True)
     control = 1
     folders = str(cwd).split("/")
     for n in range(len(folders)):
@@ -268,18 +267,23 @@ def check_geometry(cwd: os.PathLike, adsorbate_id: list) -> int:
     dx = abs(xx - x_ads)
     dy = abs(yy - y_ads)
     dz = zz - z_ads
-    print("Adsorbate (index, x, y, z): %d %.3f %.3f %.3f" % (min_arr[0], xx, yy, zz))
+    print(
+        "Adsorbate (index, x, y, z): %d %.3f %.3f %.3f" % (min_arr[0], xx, yy, zz),
+        flush=True,
+    )
     rxy = math.sqrt(dx * dx + dy * dy)
 
-    """ 1. check adsorbate """
-    if rxy >= 3.0:
-        print("The adsorbate shifts from adsorption site (xy > 1.5 Angstrom)")
+    # 1. check adsorbate
+    if rxy > 1.5:
+        print(
+            "The adsorbate shifts from adsorption site (xy > 1.5 Angstrom)", flush=True
+        )
         control = 0
-    elif dz > 4.0:
-        print("The adsorbate deadsorps (z > 3.5 Angstrom)")
+    elif dz > 3.5:
+        print("The adsorbate deadsorps (z > 3.5 Angstrom)", flush=True)
         control = 0
 
-    """ 2. check if the adsorbate dissociate """
+    # 2. check if the adsorbate dissociate
     if ads2 == "OOH":
         n = symbol.count("O")
         if n == 2:
@@ -295,10 +299,10 @@ def check_geometry(cwd: os.PathLike, adsorbate_id: list) -> int:
                 (ox[0] - ox[1]) ** 2 + (oy[0] - oy[0]) ** 2 + (oz[0] - oz[1]) ** 2
             )
             if oo_dist > 2.0:
-                print("The adsorbate dissociates")
+                print("The adsorbate dissociates", flush=True)
                 control = 0
 
-    """ 3. check metal atom """
+    # 3. check metal atom
     carbons = []
     for atom in system:
         if atom.symbol == "C":
@@ -308,7 +312,7 @@ def check_geometry(cwd: os.PathLike, adsorbate_id: list) -> int:
     c_avg = sum(carbons) / len(carbons)
     difference = abs(metal_z - c_avg)
     if difference > 2.0:
-        print("The surface reconstructs")
+        print("The surface reconstructs", flush=True)
         control = 0
     return control
 
@@ -337,9 +341,10 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
     calc = Vasp(**paramscopy)
     converged = False
     qstep = 1
+    control_geometry = 1
     if solvation == "implicit":
         qstep = 2
-    print("#vasp calculation = %d" % qstep)
+    print(f"#vasp calculation = {qstep}", flush=True)
     err = 0
     for ii in range(qstep):
         if ii == 0:
@@ -350,8 +355,9 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
                 if atom.symbol in mag.keys():
                     atom.magmom = mag[atom.symbol]
             # static calculation always at the beginning
-            params["istart"] = 0  # strart from being from scratch
-            params["icharg"] = 2  # take superposition of atomic charge density
+            params["istart"] = 0
+            # take superposition of atomic charge density
+            params["icharg"] = 2
             params["nsw"] = 0
             params["lcharg"] = True
             params["lwave"] = False
@@ -360,13 +366,12 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
             paramscopy = params.copy()
             calc1 = Vasp(**paramscopy)
             atoms.set_calculator(calc1)
-            print("(%d) static calculation" % ii)
+            print(f"({ii}) static calculation", flush=True)
             atoms.get_potential_energy()
-            """Check if a vasp calculation (electronic self consistance) is converged"""
             nelm = calc1.int_params["nelm"]
             control_electronic = check_electronic(nelm)
             if control_electronic == 0:
-                print("Error: electronic scf")
+                print("Error: electronic scf", flush=True)
                 control_ion = 1
                 err = 1
             else:
@@ -398,8 +403,10 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
             for atom in atoms:
                 if atom.symbol in mag.keys():
                     atom.magmom = mag[atom.symbol]
-            params["istart"] = 0  # not to read WAVECAR
-            params["icharg"] = 1  # restrat from CHGCAR
+            # not to read WAVECAR
+            params["istart"] = 0
+            # restart from CHGCAR
+            params["icharg"] = 1
             params["ldipol"] = True
             params["idipol"] = 3
             params["dipol"] = atoms.get_center_of_mass(scaled=True)
@@ -417,23 +424,21 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
             paramscopy = params.copy()
             calc2 = Vasp(**paramscopy)
             atoms.set_calculator(calc2)
-            print("(%d) optimization calculation" % ii)
+            print(f"({ii}) optimization calculation", flush=True)
             atoms.get_potential_energy()
-            """Check if a vasp calculation is converged"""
             nelm = calc2.int_params["nelm"]
             control_electronic = check_electronic(nelm)
             if control_electronic == 0:
-                print("Error: electronic scf")
+                print("Error: electronic scf", flush=True)
                 control_ion = 1
                 err = 1
             else:
                 control_geometry = check_geometry(cwd, adsorbate_id)
                 if control_geometry == 0:
-                    print("Error: structure disintegrates")
+                    print("Error: structure disintegrates", flush=True)
                     control_ion = 1
                     err = 1
                 else:
-                    """Check if force converged"""
                     nsw = calc2.int_params["nsw"]
                     control_ion = check_ion(nsw)
                     if control_ion == 1:
@@ -451,7 +456,6 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
                             "vasp.out",
                         ]:
                             os.system("cp %s %s.%s" % (f, f, ext))
-            # clean up
             for f in ["DOSCAR", "EIGENVAL", "PROCAR", "vasprun.xml"]:
                 os.system("rm %s" % f)
         if ii == 1 and err == 0:
@@ -463,7 +467,7 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
             for atom in atoms:
                 if atom.symbol in mag.keys():
                     atom.magmom = mag[atom.symbol]
-            params["istart"] = 1  # start from WAVECAR in vaccum
+            params["istart"] = 1
             params["nsw"] = 500
             params["ldipol"] = True
             params["idipol"] = 3
@@ -478,24 +482,20 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
             paramscopy = params.copy()
             calc4 = Vasp(**paramscopy)
             atoms.set_calculator(calc4)
-            print("(%d) optimization calculation" % ii)
             atoms.get_potential_energy()
-            """Check if a vasp electronic calculation is converged"""
             nelm = calc4.int_params["nelm"]
             control_electronic = check_electronic(nelm)  # check electronic scf
             if control_electronic == 0:
-                print("Error: electronic scf")
+                print("Error: electronic scf", flush=True)
                 control_ion = 1
                 err = 1
             else:
-                """Check if a vasp ion calculation is converged"""
                 control_geometry = check_geometry(cwd, adsorbate_id)
                 if control_geometry == 0:
-                    print("Error: structure disintegrates")
+                    print("Error: structure disintegrates", flush=True)
                     control_ion = 1
                     err = 1
                 else:
-                    """Check if force converged"""
                     nsw = calc4.int_params["nsw"]
                     control_ion = check_ion(nsw)
                     if control_ion == 1:
@@ -524,22 +524,21 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
             ]:
                 os.system("rm %s" % f)
             outcar = Path(cwd) / "OUTCAR.RDip"
-            del data["pq_index"]
-            data["ads1"] = "non"
-            data["ads2"] = "OOH"
-            read_and_write_database(outcar, "adsorption", data)
+            read_and_write_database(outcar, "e_adsorbate_without_corrections", data)
             converged = True
 
     if converged:
-        print("Relaxation is done")
+        print("Relaxation is done", flush=True)
         return True
     else:
         run_logger(
-            f"Adsorbate relaxation calculation is not converged in {cwd}.",
+            f"Adsorbate relaxation calculation is not converged in {cwd}. Check perqueue.out file for more details.",
             str(__file__),
             "error",
         )
-        print(f"Adsorbate relaxation calculation is not converged in {cwd}.")
+        print(
+            f"Adsorbate relaxation calculation is not converged in {cwd}.", flush=True
+        )
         raise ValueError(f"Adsorbate relaxation calculation is not converged in {cwd}.")
 
 
@@ -555,10 +554,24 @@ def main(**data: dict) -> tuple[bool, Optional[dict]]:
     cwd = os.getcwd()
     ooh_dir = Path(str(data["adsorbate"])) / "implicit" / "vasp_rx"
     os.chdir(ooh_dir)
-    place_adsorbate(ooh_dir, data)
+    print(f"Relaxing adsorbate in {ooh_dir}", flush=True)
+    outcar = Path(cwd) / "OUTCAR.RDip"
+    del data["pq_index"]
+    data["ads1"] = "non"  # type: ignore
+    data["ads2"] = "OOH"  # type: ignore
     if os.path.exists("OUTCAR.RDip"):
+        print(f"Adsorbate relaxation already exists in {ooh_dir}", flush=True)
+        if not check_ase_database(
+            "e_adsorbate_without_corrections", data, master=False
+        ):
+            print(f"Writing to local database for {ooh_dir}", flush=True)
+            read_and_write_database(outcar, "e_adsorbate_without_corrections", data)
+        control = True
+    elif check_ase_database("e_adsorbate_without_corrections", data, master=True):
+        print("In master database already", flush=True)
         control = True
     else:
+        place_adsorbate(ooh_dir, data)
         control = relax_adsorbate(ooh_dir, data)
     os.chdir(cwd)
     if control:

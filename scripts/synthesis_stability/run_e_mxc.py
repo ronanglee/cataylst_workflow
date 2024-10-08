@@ -6,6 +6,7 @@ from ase.db import connect  # type: ignore
 from ase.io import read  # type: ignore
 from perqueue.constants import INDEX_KW  # type: ignore
 from utils import (  # type: ignore
+    check_ase_database,
     read_and_write_database,
     run_logger,
     synthesis_stability_run_vasp,
@@ -21,37 +22,38 @@ def e_mxc(data: dict, vasp_parameters: dict) -> bool:
         vasp_parameters (dict): Dictionary containing the VASP parameters.
 
     Returns:
-       True if all the SCF calculations have converged, False otherwise.
+       converged (bool): True if all the SCF calculations have converged, raise error otherwise.
     """
     struc_path = Path(data["run_structure"])
     base_dir = Path(data["base_dir"])
-    dopant = data["dopant"]
     structure_name = Path(struc_path).stem
-    dopant_template = Path(struc_path).stem.replace("B", dopant)
-    dopant_template_path = struc_path.parent / dopant_template
+    dopant_template_path = struc_path.parent / structure_name
+    data["name"] = str(Path(data["run_structure"]).stem)
+    name = str(Path(data["run_structure"]).stem)
     structure = read(os.path.join(dopant_template_path, "init.POSCAR"))
     e_mxc_dir = Path(
         os.path.join(
             base_dir, "runs", "synthesis_stability", "e_mxc", f"{structure_name}"
         )
     )
-    if os.path.exists(e_mxc_dir):
-        outcar = Path(e_mxc_dir) / "OUTCAR.opt"
-        data["name"] = str(Path(data["run_structure"]).stem)
+    outcar = Path(e_mxc_dir) / "OUTCAR.opt"
+    if os.path.exists(os.path.join(e_mxc_dir, "OUTCAR.opt")):
+        print(
+            f"e_mxc calculation already exists for {structure_name} in ",
+            os.path.join(e_mxc_dir, "OUTCAR.opt"),
+        )
+        if not check_ase_database("e_mxc", data, master=False):
+            print(f"Writing to local database for {name}", flush=True)
+            read_and_write_database(outcar, "e_mxc", data)
+        return True
+    if check_ase_database("e_mxc", data, master=True):
+        print("In master database already", flush=True)
         return True
     e_mxc_dir.mkdir(parents=True, exist_ok=True)
-    if dopant != "":
-        if dopant != "O":
-            if dopant != "SB":
-                for atoms in structure:
-                    if atoms.symbol == "B":
-                        atoms.symbol = dopant
     structure.write(e_mxc_dir / "init.POSCAR")
     cwd = os.getcwd()
     converged = synthesis_stability_run_vasp(e_mxc_dir, vasp_parameters, "e_mxc")
     if converged:
-        outcar = Path(e_mxc_dir) / "OUTCAR.opt"
-        data["name"] = str(Path(data["run_structure"]).stem)
         read_and_write_database(outcar, "e_mxc", data)
         os.chdir(cwd)
         return True
@@ -61,7 +63,7 @@ def e_mxc(data: dict, vasp_parameters: dict) -> bool:
             str(__file__),
             "error",
         )
-        print(f"e_mxc calculation did not converge for {structure}.")
+        print(f"e_mxc calculation did not converge for {structure}.", flush=True)
         os.chdir(cwd)
         raise ValueError(f"e_mxc calculation did not converge for {structure}.")
 
