@@ -433,7 +433,7 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
                 control_ion = 1
                 err = 1
             else:
-                # control_geometry = check_geometry(cwd, adsorbate_id)
+                control_geometry = check_geometry(cwd, adsorbate_id)
                 if control_geometry == 0:
                     print("Error: structure disintegrates", flush=True)
                     control_ion = 1
@@ -490,7 +490,7 @@ def relax_adsorbate(cwd: os.PathLike, data: dict) -> bool:
                 control_ion = 1
                 err = 1
             else:
-                # control_geometry = check_geometry(cwd, adsorbate_id)
+                control_geometry = check_geometry(cwd, adsorbate_id)
                 if control_geometry == 0:
                     print("Error: structure disintegrates", flush=True)
                     control_ion = 1
