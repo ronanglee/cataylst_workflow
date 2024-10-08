@@ -61,6 +61,10 @@ def main(**data: dict) -> tuple[bool, dict | None]:
     del data["pq_index"]
     ul_2e_cutoff = 0.2
     ooh_descriptor_cutoffs = [3.5, 5]
+    print(
+        f"{structure}/{carbon_structure}/{dopant}{metal} - activity: {ul_2e} eV, selectivity: {ooh_descriptor} eV",
+        flush=True,
+    )
     if (
         ooh_descriptor_cutoffs[0] < ooh_descriptor < ooh_descriptor_cutoffs[1]
         and ul_2e > ul_2e_cutoff
