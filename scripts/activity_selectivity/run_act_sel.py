@@ -13,19 +13,19 @@ database_dir = Path(__file__).parent.parent.parent / "runs" / "databases"
 config = read_config()
 
 
-def gibbs_ooh(g_ooh: float, g_bare: float, thermal_ooh: float) -> float:
-    """Calculate the Gibbs free energy of OOH with 0.02 being
+def gibbs_ooh(e_ooh: float, e_bare: float, thermal_ooh: float) -> float:
+    """Calculate the Gibbs free energy of OOH with 0.2 being
     the Christensen correction.
 
     Args:
-        g_ooh (float): Free energy of OOH
-        g_bare (float): Free energy of bare surface
+        e_ooh (float): DFT energy of OOH
+        e_bare (float): DFT energy of bare surface
         thermal_ooh (float): Thermal correction of OOH
 
     Returns:
         float: Gibbs free energy of OOH
     """
-    return g_ooh + (1.5 * g_h2) - g_bare - (2 * g_h2o) + thermal_ooh + 0.2
+    return e_ooh + (1.5 * g_h2) - e_bare - (2 * g_h2o) + thermal_ooh + 0.2
 
 
 def main(**data: dict) -> tuple[bool, dict | None]:
@@ -49,12 +49,12 @@ def main(**data: dict) -> tuple[bool, dict | None]:
         )
     )
     structure = str(Path(data["run_structure"]).stem)  # type: ignore
-    g_ooh = adsorption_db.get(name=structure, ads1="non", ads2="OOH").energy
-    g_bare = pristine_db.get(name=structure).energy
-    delta_g1 = gibbs_ooh(g_ooh, g_bare, thermal_ooh) + dg_h2o
+    e_ooh = adsorption_db.get(name=structure, ads1="non", ads2="OOH").energy
+    e_bare = pristine_db.get(name=structure).energy
+    delta_g1 = gibbs_ooh(e_ooh, e_bare, thermal_ooh) + dg_h2o
     # 4.92 dg_h2o, d_g (delta_g) 1.4 h2o2 to water
-    delta_g2 = (4.92 - 1.4) - gibbs_ooh(g_ooh, g_bare, thermal_ooh)
-    ooh_descriptor = gibbs_ooh(g_ooh, g_bare, thermal_ooh)
+    delta_g2 = (4.92 - 1.4) - gibbs_ooh(e_ooh, e_bare, thermal_ooh)
+    ooh_descriptor = gibbs_ooh(e_ooh, e_bare, thermal_ooh)
 
     # Limiting potential (-1 to make it a volcano)
     ul_2e = -1 * max(delta_g1, delta_g2)
