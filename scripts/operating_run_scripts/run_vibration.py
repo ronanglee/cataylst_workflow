@@ -169,7 +169,7 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
                         atom.magmom = mag[atom.symbol]
                 os.system("cp WAVECAR.preRDip WAVECAR")
                 params["istart"] = 1
-                params["nsw"] = 9999
+                params["nsw"] = 500
                 params["ldipol"] = True
                 params["idipol"] = 3
                 params["dipol"] = atoms.get_center_of_mass(scaled=True)
@@ -217,7 +217,7 @@ def calc_vibration(cwd: os.PathLike, data: dict) -> bool:
             params["idipol"] = 3
             params["dipol"] = atoms.get_center_of_mass(scaled=True)
             params["isif"] = 0
-            params["nsw"] = 999
+            params["nsw"] = 0
             if solvation == "implicit":
                 params["lsol"] = True
                 params["eb_k"] = 80
