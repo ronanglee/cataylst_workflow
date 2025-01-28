@@ -24,7 +24,7 @@ def vasp_input() -> dict:
         "lcharg": True,  # write charge densities to CHGCAR file?
         # construct 'initial' chg. dens.: 0: from wavefun., 1: from CHGCAR, 2: superpos'n of atomic
         "icharg": 2,
-        "lwave": False,  # write wavefunctions it WAVECAR file?
+        "lwave": True,  # write wavefunctions it WAVECAR file?
         "lcorr": True,  # Corrections to the forces
         "lmaxmix": 4,  # See manual (or rather VASP wiki)
         "lasph": True,  # See manual
