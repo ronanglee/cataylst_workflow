@@ -625,6 +625,8 @@ def get_vibrational_correction() -> float:
             if "Zero-point energy" in line:
                 break
     correction = zpe_tot + u_tot - ts_tot
+    if ts_tot > 0.4:
+        print(f"Warning: High entropy contribution ({ts_tot:.2f} eV). This may indicate an issue with the vibrational analysis (i.e., rotation treated as vibration).", flush=True)
     return correction
 
 
