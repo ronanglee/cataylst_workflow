@@ -7,5 +7,4 @@ Pre-commit is used for linting, type-checking etc.,
 `$ pre-commit install`
 
 # Pytest
-
-Tests have also been developed to ensure code is working correctly.
+...
